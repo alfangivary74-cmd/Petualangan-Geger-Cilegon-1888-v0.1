@@ -1,0 +1,2593 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Game Pembelajaran: Labirin Harta Karun</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;600;800;900&display=swap" rel="stylesheet">
+    <!-- Three.js (Untuk Simulasi Map 3D di Mode Solo) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    
+    <style>
+        body {
+            font-family: 'Nunito', sans-serif;
+            background-color: #1e293b;
+            background-image: 
+                radial-gradient(circle at 15% 50%, rgba(74, 222, 128, 0.1), transparent 25%),
+                radial-gradient(circle at 85% 30%, rgba(56, 189, 248, 0.1), transparent 25%);
+            margin: 0;
+            overflow-x: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        h1, h2, h3, .font-heading {
+            font-family: 'Fredoka One', cursive;
+        }
+
+        .game-container {
+            width: 100%;
+            max-width: 1200px;
+            display: grid;
+            grid-template-columns: 1fr 320px;
+            gap: 20px;
+            padding: 20px;
+        }
+
+        @media (max-width: 1100px) {
+            .game-container {
+                grid-template-columns: 1fr;
+            }
+            .main-column { order: 1; }
+            .sidebar-right { order: 2; }
+        }
+
+        @media (max-width: 768px) {
+            .game-container { padding: 10px; gap: 15px; }
+            .panel { padding: 15px; border-width: 4px; border-radius: 20px;}
+            .panel-header { font-size: 1.4rem; margin-bottom: 10px; }
+            
+            .board-wrapper { padding: 8px; border-width: 6px; border-radius: 20px; }
+            .board { gap: 2px; padding: 2px; border-radius: 10px; }
+            
+            .modal-content { padding: 20px; width: 95%; border-width: 5px; border-radius: 20px; }
+            .modal-title { font-size: 1.8rem; }
+            .modal-text { font-size: 1rem; margin-bottom: 15px; }
+            
+            .btn-action { font-size: 1rem; padding: 8px 16px; border-width: 3px; box-shadow: 0 4px 0 #b45309; }
+            .dice { width: 60px; height: 60px; font-size: 2rem; margin-bottom: 10px; border-width: 3px; }
+            .font-heading.text-4xl { font-size: 2rem; line-height: 1.2; }
+        }
+
+        .board-wrapper {
+            background-color: #0f172a;
+            padding: 15px;
+            border: 8px solid #334155;
+            border-radius: 25px;
+            box-shadow: 0 10px 0 #0f172a;
+            width: 100%;
+            margin: 0 auto;
+        }
+        
+        .board {
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            grid-template-rows: repeat(12, 1fr);
+            gap: 3px;
+            background-color: #14532d;
+            padding: 5px;
+            border-radius: 15px;
+            aspect-ratio: 1 / 1;
+            width: 100%;
+        }
+
+        .cell {
+            border-radius: 8px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: clamp(10px, 2vw, 1.5rem);
+            position: relative;
+            transition: all 0.3s;
+            aspect-ratio: 1 / 1;
+        }
+
+        .cell.land { background-color: #4ade80; }
+        .cell.land-alt { background-color: #22c55e; }
+
+        .cell.river {
+            background-color: #38bdf8;
+            background-image: linear-gradient(45deg, rgba(255,255,255,0.15) 25%, transparent 25%, transparent 50%, rgba(255,255,255,0.15) 50%, rgba(255,255,255,0.15) 75%, transparent 75%, transparent);
+            background-size: 20px 20px;
+            animation: flow 2s linear infinite;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.2);
+        }
+        
+        @keyframes flow {
+            0% { background-position: 0 0; }
+            100% { background-position: 20px 20px; }
+        }
+
+        .cell.scenery {
+            font-size: clamp(12px, 2.5vw, 2rem);
+            filter: drop-shadow(2px 3px 1px rgba(0,0,0,0.2));
+            z-index: 1;
+        }
+
+        .cell.path {
+            background: linear-gradient(135deg, #FCEFB4, #F3D076);
+            border: 2px solid #C48044;
+            box-shadow: 0 4px 0 #C48044;
+            z-index: 2;
+        }
+        
+        .cell.path.bridge {
+            background: linear-gradient(90deg, #8B4513, #A0522D, #8B4513);
+            border: 2px solid #5C3A21;
+            box-shadow: 0 4px 0 #3e2413;
+        }
+        
+        .cell.start { background: #4ade80 !important; border-color: #166534 !important; box-shadow: 0 4px 0 #166534 !important;}
+        .cell.finish { background: #f87171 !important; border-color: #991b1b !important; box-shadow: 0 4px 0 #991b1b !important;}
+
+        .cell.path.safe {
+            background: linear-gradient(135deg, #cbd5e1, #94a3b8) !important;
+            border-color: #475569 !important;
+            box-shadow: 0 4px 0 #475569 !important;
+        }
+
+        .cell-content {
+            position: absolute;
+            font-size: clamp(12px, 2.5vw, 1.8rem);
+            filter: drop-shadow(2px 2px 0px rgba(0,0,0,0.3));
+            animation: floatItem 2s infinite ease-in-out;
+        }
+
+        @keyframes floatItem {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-5px); }
+        }
+
+        .pawn {
+            position: absolute;
+            border-radius: 50%;
+            border: 2px solid white;
+            box-shadow: 0 3px 6px rgba(0,0,0,0.4);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+            transition: top 0.3s cubic-bezier(0.25, 1, 0.5, 1), left 0.3s cubic-bezier(0.25, 1, 0.5, 1), width 0.3s, height 0.3s, font-size 0.3s;
+        }
+
+        @keyframes pawnJump2D {
+            0% { transform: scale(1, 1) translateY(0); }
+            30% { transform: scale(0.8, 1.25) translateY(-20px); }
+            70% { transform: scale(1.1, 0.85) translateY(0); }
+            100% { transform: scale(1, 1) translateY(0); }
+        }
+        
+        .pawn-jumping {
+            animation: pawnJump2D 0.3s ease-in-out !important;
+            z-index: 50 !important;
+        }
+
+        .dice-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-top: 20px;
+        }
+        .dice {
+            width: 80px;
+            height: 80px;
+            background: white;
+            border: 4px solid #1e293b;
+            border-radius: 15px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 3rem;
+            font-weight: bold;
+            color: #1e293b;
+            box-shadow: inset 0 -5px 0 #cbd5e1, 0 6px 0 #0f172a;
+            margin-bottom: 15px;
+            transition: transform 0.1s;
+        }
+
+        .btn-action {
+            font-family: 'Fredoka One', cursive;
+            background: #fde047;
+            color: #b45309;
+            border: 4px solid #b45309;
+            padding: 10px 20px;
+            font-size: 1.2rem;
+            border-radius: 15px;
+            cursor: pointer;
+            box-shadow: 0 6px 0 #b45309;
+            transition: all 0.1s;
+            text-transform: uppercase;
+        }
+        .btn-action:active {
+            transform: translateY(6px);
+            box-shadow: 0 0 0 #b45309;
+        }
+        .btn-action:disabled {
+            background: #cbd5e1;
+            border-color: #64748b;
+            color: #64748b;
+            box-shadow: 0 6px 0 #64748b;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .score-table { width: 100%; border-collapse: separate; border-spacing: 0 8px; }
+        .score-table th { text-align: left; padding: 5px 10px; color: #64748b; font-size: 0.9rem; text-transform: uppercase; }
+        .score-row { background: #f1f5f9; border-radius: 10px; transition: transform 0.2s; }
+        .score-row.active { background: #bbf7d0; border: 2px solid #22c55e; transform: scale(1.05); }
+        .score-row td { padding: 10px; font-weight: 800; color: #334155; }
+        .score-row td:first-child { border-radius: 10px 0 0 10px; }
+        .score-row td:last-child { border-radius: 0 10px 10px 0; text-align: right; font-size: 1.2rem; color: #e11d48;}
+        
+        .life-badge {
+            display: inline-block;
+            background: #fee2e2;
+            color: #ef4444;
+            padding: 2px 6px;
+            border-radius: 10px;
+            font-size: 0.8rem;
+            margin-left: 5px;
+        }
+
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(15, 23, 42, 0.8);
+            backdrop-filter: blur(5px);
+            display: flex; justify-content: center; align-items: center;
+            z-index: 100;
+            opacity: 0; visibility: hidden;
+            transition: all 0.3s;
+        }
+        .modal-overlay.show { opacity: 1; visibility: visible; }
+        
+        .modal-content {
+            background: #ffffff;
+            border: 8px solid #1e293b;
+            border-radius: 30px;
+            padding: 30px;
+            width: 90%;
+            max-width: 500px;
+            text-align: center;
+            box-shadow: 10px 10px 0px #0f172a;
+            transform: scale(0.8);
+            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        .modal-overlay.show .modal-content { transform: scale(1); }
+
+        .modal-icon { font-size: 5rem; margin-bottom: 10px; animation: bounce 1s infinite; }
+        .modal-title { font-size: 2.5rem; color: #e11d48; text-shadow: 2px 2px 0px #fde047; margin-bottom: 10px; font-family: 'Fredoka One';}
+        .modal-text { font-size: 1.2rem; color: #334155; font-weight: 800; margin-bottom: 20px; }
+
+        .quiz-btn {
+            background: #f8fafc;
+            border: 3px solid #cbd5e1;
+            padding: 12px;
+            border-radius: 15px;
+            font-weight: 800;
+            font-size: 1.1rem;
+            color: #334155;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: left;
+        }
+        .quiz-btn:hover { background: #e2e8f0; border-color: #94a3b8; }
+        .quiz-btn.correct { background: #bbf7d0; border-color: #22c55e; color: #166534; }
+        .quiz-btn.wrong { background: #fecaca; border-color: #ef4444; color: #991b1b; }
+
+        .hide-screen { display: none !important; }
+
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+    </style>
+</head>
+<body>
+
+    <button id="btn-back" onclick="handleBackClick()" class="fixed top-4 left-4 z-[9999] bg-yellow-400 border-2 md:border-4 border-slate-800 text-slate-800 p-2 rounded-xl hover:bg-yellow-300 active:translate-y-1 active:shadow-none shadow-[0_3px_0_#0f172a] transition-all flex items-center justify-center w-10 h-10 md:w-12 md:h-12 font-heading hide-screen" style="position: fixed !important;" title="Kembali ke Menu Utama">
+        <span class="text-sm md:text-lg">⬅️</span>
+    </button>
+
+    <!-- Bar Nyawa Berbaris di Pojok Kiri Atas -->
+    <div id="hud-lives" class="fixed top-4 left-16 md:left-20 z-[9999] bg-white border-2 md:border-4 border-slate-800 px-3 py-1.5 md:py-2 rounded-xl shadow-[0_3px_0_#0f172a] flex items-center gap-2 hide-screen font-heading">
+        <span id="hud-player-emoji" class="text-sm md:text-base">🤠</span>
+        <span id="hud-player-name" class="text-xs md:text-sm text-slate-700 hidden sm:inline-block">Pemain</span>
+        <div id="hud-hearts" class="flex gap-1 text-sm md:text-lg">
+            <!-- Diisi dinamis via JS -->
+        </div>
+        <span id="level-display-badge" class="font-bold text-rose-600 text-xs md:text-sm bg-rose-100 py-1 px-3 rounded-full border border-rose-300 ml-1">Level 1</span>
+    </div>
+
+    <button id="btn-sound" onclick="toggleSound()" class="fixed top-4 right-20 z-[9999] bg-yellow-400 border-4 border-slate-800 text-slate-800 p-3 rounded-2xl hover:bg-yellow-300 active:translate-y-1 active:shadow-none shadow-[0_4px_0_#0f172a] transition-all flex items-center justify-center w-12 h-12 md:w-14 md:h-14 font-heading" style="position: fixed !important; right: 80px !important;" title="Matikan/Nyalakan Suara">
+        <span id="sound-icon" class="text-xl md:text-2xl">🔊</span>
+    </button>
+
+    <button id="btn-fullscreen" onclick="toggleFullscreen()" class="fixed top-4 right-4 z-[9999] bg-yellow-400 border-4 border-slate-800 text-slate-800 p-3 rounded-2xl hover:bg-yellow-300 active:translate-y-1 active:shadow-none shadow-[0_4px_0_#0f172a] transition-all flex items-center justify-center w-12 h-12 md:w-14 md:h-14 font-heading" style="position: fixed !important;" title="Layar Penuh">
+        <span id="fullscreen-icon" class="text-xl md:text-2xl">🖥️</span>
+    </button>
+
+    <div id="screen-menu" class="w-full max-w-md bg-white border-8 border-slate-800 rounded-[30px] shadow-[10px_10px_0_#0f172a] p-8 text-center mx-4 z-50">
+        <div class="text-6xl mb-4">🗺️</div>
+        <h1 class="font-heading text-4xl text-yellow-400 drop-shadow-[2px_2px_0_rgba(225,29,72,1)] mb-6" style="-webkit-text-stroke: 2px #be123c;">LABIRIN HARTA KARUN</h1>
+        <p class="font-bold text-slate-500 mb-8 bg-slate-100 p-2 rounded-xl border-2 border-slate-200">Petualangan Sejarah Solo 3D</p>
+        
+        <div class="flex flex-col gap-4">
+            <button onclick="selectMode(1)" class="btn-action w-full !text-2xl !py-4 flex justify-center items-center gap-3"><span class="text-3xl">🤠</span> Mulai Petualangan Solo (3D)</button>
+        </div>
+    </div>
+
+    <div id="screen-setup" class="hide-screen w-full max-w-lg bg-white border-8 border-slate-800 rounded-[30px] shadow-[10px_10px_0_#0f172a] p-8 text-center mx-4 z-50 max-h-[95vh] overflow-y-auto">
+        <h2 class="font-heading text-3xl text-slate-700 mb-2">Persiapan Pemain</h2>
+        <p class="font-bold text-slate-500 mb-6">Masukkan nama jagoanmu!</p>
+        
+        <div id="player-inputs" class="flex flex-col gap-4 mb-6">
+            <!-- Dinamis via JS -->
+        </div>
+
+        <div class="text-left bg-yellow-100 p-5 rounded-2xl border-4 border-yellow-400 mb-6 shadow-sm">
+            <h3 class="font-heading text-xl text-yellow-700 mb-3 border-b-2 border-yellow-300 pb-2">📜 Aturan Main</h3>
+            <ol class="list-decimal pl-5 text-sm font-bold text-slate-700 space-y-2">
+                <li>Melangkah menuju ubin berikutnya sesuai petunjuk.</li>
+                <li>Setiap pemain dibekali dengan <strong>3 Nyawa</strong> ❤️ di awal permainan.</li>
+                <li>Jika berhenti di 💰, kumpulkan potongan sejarah Geger Cilegon.</li>
+                <li>Mendapat +10 Poin dari setiap potongan sejarah.</li>
+                <li>Pemain pertama yang mencapai <strong>FINISH</strong> mengakhiri level/game.</li>
+                <li>Waspadai ubin berbahaya seperti ♨️ (-5) dan ☣️!</li>
+                <li>Ubin rintangan memicu mini-game **Kertas, Gunting, Batu** melawan penjaga! Menang = bebas hukuman.</li>
+                <li>Jika kalah di ubin rintangan, <strong>1 Nyawa akan dikorbankan</strong> untuk melindungimu dari rintangan! Jika nyawa habis (0), pion Anda akan dikembalikan ke **START** dengan nyawa pulih penuh!</li>
+                <li>Pendaratan pada ubin 🔄 (Jalan Pintas di ubin 15 & 25) akan memberi **opsi pilihan** untuk jalan pintas!</li>
+                <li>Ubin abu-abu 🛡️ adalah <strong>Zona Aman</strong> (memberi efek Tameng gratis).</li>
+                <li>Pemenang adalah yang memiliki <strong>Poin Tertinggi</strong>!</li>
+            </ol>
+        </div>
+        
+        <div class="flex justify-center gap-4 flex-wrap">
+            <button onclick="handleBackClick()" class="btn-action !py-2 !px-6 !text-base !border-2 !shadow-[0_4px_0_#64748b] !bg-slate-300 !border-slate-500 !text-slate-700 w-auto max-w-xs transition-all">Kembali</button>
+            <button onclick="startGame()" class="btn-action !py-2 !px-6 !text-base !border-2 !shadow-[0_4px_0_#15803d] !bg-green-400 !border-green-700 !text-green-900 w-auto max-w-xs transition-all">Mulai Petualangan!</button>
+        </div>
+    </div>
+
+    <div id="screen-game" class="game-container hide-screen">
+        <div class="main-column flex flex-col gap-5">
+            <!-- CONTAINER PAPAN 2D GRID -->
+            <div id="board-2d-wrapper" class="board-wrapper">
+                <div id="game-board" class="board">
+                    <!-- Grid dibuat via JS -->
+                </div>
+            </div>
+
+            <!-- CONTAINER PAPAN 3D CANVAS (UNTUK MODE SOLO) -->
+            <div id="board-3d-wrapper" class="board-wrapper hidden" style="position: relative; overflow: hidden; height: 500px; max-height: 70vh;">
+                <div id="canvas-3d-container" class="w-full h-full rounded-2xl bg-slate-900"></div>
+                <div class="absolute bottom-4 left-4 bg-slate-900/90 backdrop-blur text-white text-xs px-3 py-1.5 rounded-lg border border-slate-700 pointer-events-none font-bold shadow-lg flex items-center gap-2">
+                    <span class="animate-pulse">🎥</span> Kamera Pengikut Pion Aktif (Mode Solo 3D)
+                </div>
+            </div>
+
+            <div class="bottom-controls flex flex-col md:flex-row gap-5">
+                <!-- Panel Giliran / Kontrol Maju -->
+                <div class="panel flex-1 flex flex-col justify-center items-center bg-white border-4 border-slate-800 rounded-[20px] p-5">
+                    <h2 class="panel-header text-xl font-heading mb-2">🕹️ Kendali Perjalanan</h2>
+                    
+                    <!-- Mode Solo (Tombol Maju Tunggal) -->
+                    <div id="control-solo" class="flex flex-col items-center mt-2 w-full">
+                        <p class="text-xs font-bold text-slate-500 mb-3 bg-slate-100 px-3 py-1 rounded-full border border-slate-200">Gunakan Tombol Panah Atas (Keyboard) atau tombol di bawah:</p>
+                        <button onclick="handleForwardInput()" class="btn-action w-44 h-20 !text-2xl flex flex-col justify-center items-center gap-1 shadow-[0_6px_0_#b45309] transition-transform active:translate-y-1.5">
+                            <span class="text-3xl animate-bounce">⬆️</span>
+                            <span class="text-xs font-extrabold tracking-wider">MELANGKAH</span>
+                        </button>
+                    </div>
+
+                    <!-- Mode Duo & Squad (Sistem Dadu Tradisional - Hidden since solo-only) -->
+                    <div id="control-multiplayer" class="dice-container w-full max-w-[200px] mt-2 hidden">
+                        <div class="text-center mb-2">
+                            <span id="turn-indicator" class="inline-block px-4 py-2 rounded-xl text-white font-bold text-xl shadow-md border-2 border-slate-800">
+                                Pemain 1
+                            </span>
+                        </div>
+                        <div id="dice" class="dice">1</div>
+                        <button id="btn-roll" class="btn-action w-full mt-2">Lempar Dadu</button>
+                    </div>
+                </div>
+
+                <div class="panel flex-1">
+                    <h2 class="panel-header">🔑 Legenda</h2>
+                    <ul class="text-sm font-bold text-slate-600 space-y-2 grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-2 text-left m-0 p-0">
+                        <li class="flex items-center gap-2 bg-slate-50 p-2 rounded-lg border"><span class="text-xl">💰</span> Sejarah (+10)</li>
+                        <li class="flex items-center gap-2 bg-slate-50 p-2 rounded-lg border"><span class="text-xl">⭐</span> Bonus (+15)</li>
+                        <li class="flex items-center gap-2 bg-slate-50 p-2 rounded-lg border"><span class="text-xl">⚠️</span> Jebakan Mundur</li>
+                        <li class="flex items-center gap-2 bg-slate-50 p-2 rounded-lg border"><span class="text-xl">🔄</span> Jalan Pintas</li>
+                        <li class="flex items-center gap-2 bg-slate-50 p-2 rounded-lg border"><span class="text-xl">♨️</span> Air Panas (-5)</li>
+                        <li class="flex items-center gap-2 bg-slate-50 p-2 rounded-lg border"><span class="text-xl">☣️</span> Bahaya (Mundur START)</li>
+                        <li class="flex items-center gap-2 bg-slate-50 p-2 rounded-lg border"><span class="text-xl">🛡️</span> Zona Aman (Anti Tabrak)</li>
+                        <li class="flex items-center gap-2 bg-slate-50 p-2 rounded-lg border"><span class="text-xl">⚡</span> Petir (Poin Reset 0)</li>
+                        <li class="flex items-center gap-2 bg-slate-50 p-2 rounded-lg border"><span class="text-xl">⛩️</span> Gerbang Penanda</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="sidebar-right flex flex-col gap-5">
+            <div class="panel h-full bg-white rounded-3xl p-5 border-4 border-slate-800 shadow-md">
+                <h2 class="panel-header text-center mb-4 font-heading text-2xl text-slate-800 border-b-4 border-slate-100 pb-2">🏆 Papan Skor</h2>
+                <table class="score-table">
+                    <thead>
+                        <tr>
+                            <th>Pemain</th>
+                            <th class="text-center" title="Potongan Sejarah">📜</th>
+                            <th class="text-right">Poin</th>
+                        </tr>
+                    </thead>
+                    <tbody id="leaderboard-body">
+                        <!-- Baris skor via JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Kertas Gunting Batu -->
+    <div id="kgb-modal" class="modal-overlay">
+        <div class="modal-content !max-w-md">
+            <div class="modal-icon">✊🖐️✌️</div>
+            <h2 class="modal-title !text-3xl text-yellow-500">Tantangan Penjaga!</h2>
+            <p class="text-xs font-bold text-slate-500 mb-4 bg-yellow-100 p-2.5 rounded-xl border border-yellow-300">
+                Kalahkan Penjaga Rintangan dalam Suit Jepang (Kertas, Gunting, Batu) untuk menghindari efek rintangan!
+            </p>
+            
+            <div class="flex justify-around items-center my-6 bg-slate-50 p-4 rounded-2xl border-2 border-slate-200">
+                <div class="text-center w-28">
+                    <span class="block text-xs font-bold text-slate-400 uppercase tracking-widest">Kamu</span>
+                    <span id="kgb-player-hand" class="text-5xl mt-3 block transition-transform duration-100">🤖</span>
+                </div>
+                <div class="text-xl font-black text-slate-400">VS</div>
+                <div class="text-center w-28">
+                    <span class="block text-xs font-bold text-slate-400 uppercase tracking-widest">Penjaga</span>
+                    <span id="kgb-opponent-hand" class="text-5xl mt-3 block transition-transform duration-100">🤖</span>
+                </div>
+            </div>
+
+            <div id="kgb-choices" class="grid grid-cols-3 gap-3 mb-2">
+                <button onclick="playKGB('batu')" class="btn-action !p-3 !text-3xl flex flex-col items-center gap-1 shadow-[0_4px_0_#b45309]">
+                    ✊ <span class="text-xs font-bold text-slate-700">BATU</span>
+                </button>
+                <button onclick="playKGB('kertas')" class="btn-action !p-3 !text-3xl flex flex-col items-center gap-1 shadow-[0_4px_0_#b45309]">
+                    🖐️ <span class="text-xs font-bold text-slate-700">KERTAS</span>
+                </button>
+                <button onclick="playKGB('gunting')" class="btn-action !p-3 !text-3xl flex flex-col items-center gap-1 shadow-[0_4px_0_#b45309]">
+                    ✌️ <span class="text-xs font-bold text-slate-700">GUNTING</span>
+                </button>
+            </div>
+
+            <p id="kgb-feedback" class="font-bold text-lg mt-4 hidden text-center"></p>
+        </div>
+    </div>
+
+    <!-- Modal Pilihan Jalan Pintas Baru -->
+    <div id="shortcut-modal" class="modal-overlay">
+        <div class="modal-content !max-w-md">
+            <div class="modal-icon">🔄🏃‍♂️</div>
+            <h2 class="modal-title !text-3xl text-yellow-500">Peluang Jalan Pintas!</h2>
+            <p class="text-slate-600 font-bold mb-6 text-sm md:text-base leading-relaxed">
+                Kamu mendarat di ubin **Jalan Pintas**! Apakah kamu ingin menggunakan jalan pintas ini untuk meluncur maju sebanyak **4 langkah**?
+            </p>
+            <div class="flex gap-4 justify-center">
+                <button id="btn-shortcut-no" class="btn-action !bg-slate-300 !border-slate-500 !text-slate-700 !shadow-[0_6px_0_#64748b] w-1/2">
+                    Jangan Gunakan
+                </button>
+                <button id="btn-shortcut-yes" class="btn-action !bg-green-400 !border-green-700 !text-green-900 !shadow-[0_6px_0_#15803d] w-1/2">
+                    Gunakan! (+4)
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Potongan Sejarah -->
+    <div id="snippet-modal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-icon">📜</div>
+            <h2 class="modal-title !text-3xl text-yellow-500">Potongan Sejarah!</h2>
+            <div class="bg-yellow-50 border-2 border-yellow-200 p-4 rounded-xl mb-4 text-left">
+                <p id="snippet-text" class="text-slate-700 font-bold leading-relaxed text-sm md:text-base">Teks sejarah di sini...</p>
+                <p class="text-xs text-rose-500 mt-2 italic font-semibold">Sumber Resmi: <a href="https://id.wikipedia.org/wiki/Geger_Cilegon_(1888)" target="_blank" class="underline hover:text-rose-700">Wikipedia - Geger Cilegon (1888)</a></p>
+            </div>
+            <button id="btn-claim-snippet" class="btn-action w-full !bg-green-400 !border-green-700 !text-green-900 !shadow-[0_6px_0_#15803d]">Kumpulkan & Klaim +10 Poin!</button>
+        </div>
+    </div>
+
+    <!-- Modal Informasi Game -->
+    <div id="info-modal" class="modal-overlay">
+        <div class="modal-content">
+            <div id="info-icon" class="modal-icon">⚠️</div>
+            <h2 id="info-title" class="modal-title">Perhatian!</h2>
+            <p id="info-text" class="modal-text">Pesan informasi di sini.</p>
+            <button id="btn-info-close" class="btn-action mt-4">Lanjut</button>
+        </div>
+    </div>
+
+    <!-- Modal Ujian Gerbang Finish -->
+    <div id="finish-quiz-modal" class="modal-overlay">
+        <div class="modal-content !max-w-md">
+            <div class="modal-icon">⛩️🛡️</div>
+            <h2 class="modal-title !text-3xl text-yellow-500">Gerbang Ujian Akhir!</h2>
+            <p class="text-xs font-bold text-slate-500 mb-4">Jawab 4 pertanyaan sejarah berturut-turut untuk membuka Finish!</p>
+            
+            <div class="flex justify-center gap-2 mb-6">
+                <div id="fq-step-1" class="w-8 h-8 rounded-full border-2 border-slate-300 flex items-center justify-center font-bold text-slate-400 bg-slate-50">1</div>
+                <div id="fq-step-2" class="w-8 h-8 rounded-full border-2 border-slate-300 flex items-center justify-center font-bold text-slate-400 bg-slate-50">2</div>
+                <div id="fq-step-3" class="w-8 h-8 rounded-full border-2 border-slate-300 flex items-center justify-center font-bold text-slate-400 bg-slate-50">3</div>
+                <div id="fq-step-4" class="w-8 h-8 rounded-full border-2 border-slate-300 flex items-center justify-center font-bold text-slate-400 bg-slate-50">4</div>
+            </div>
+
+            <div class="bg-yellow-50 border-2 border-yellow-200 p-4 rounded-xl mb-4 text-left">
+                <p id="finish-quiz-question" class="text-slate-700 font-bold leading-relaxed text-sm md:text-base">Pertanyaan sejarah...</p>
+            </div>
+            
+            <div id="finish-quiz-options" class="grid grid-cols-1 gap-2 text-left">
+                <!-- Tombol dinamis -->
+            </div>
+            
+            <p id="finish-quiz-feedback" class="font-bold text-lg hidden mt-4 transition-all"></p>
+        </div>
+    </div>
+
+    <!-- Modal Pengumuman Juara -->
+    <div id="winner-modal" class="modal-overlay">
+        <div class="modal-content !max-w-2xl">
+            <div class="modal-icon">🎉🏆🎉</div>
+            <h2 class="modal-title !text-5xl">SELESAI!</h2>
+            <p class="modal-text text-xl" id="winner-level-msg">Seseorang telah mencapai garis Finish.</p>
+            <div class="bg-slate-100 p-5 rounded-2xl border-4 border-slate-300 mb-5">
+                <h3 class="font-heading text-2xl text-slate-700 mb-3">Hasil Akhir:</h3>
+                <div id="final-standings" class="flex flex-col gap-2"></div>
+            </div>
+            <div class="flex justify-center gap-4 flex-wrap" id="winner-actions">
+                <!-- Tombol aksi dinamis via JS -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Keluar Game -->
+    <div id="confirm-exit-modal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-icon">🚪</div>
+            <h2 class="modal-title">Keluar Game?</h2>
+            <p class="modal-text">Apakah kamu yakin ingin kembali ke menu utama? Semua skor dan kemajuan bermain saat ini akan terhapus!</p>
+            <div class="flex gap-3 justify-center">
+                <button onclick="closeExitModal()" class="btn-action !bg-slate-300 !border-slate-500 !text-slate-700 !shadow-[0_6px_0_#64748b] w-1/2">Batal</button>
+                <button onclick="confirmExit()" class="btn-action !bg-red-400 !border-red-700 !text-red-900 !shadow-[0_6px_0_#991b1b] w-1/2">Ya, Keluar</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const AudioHelper = {
+            ctx: null,
+            muted: false,
+            bgmPlaying: false,
+            bgmTimeout: null,
+            activeOscillators: [],
+            
+            init() {
+                if (!this.ctx) {
+                    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                if (this.ctx.state === 'suspended') {
+                    this.ctx.resume();
+                }
+            },
+            
+            playAmbientBGM() {
+                if (this.muted || this.bgmPlaying) return;
+                this.init();
+                this.bgmPlaying = true;
+                
+                const tempo = 135; 
+                const stepDuration = 60 / tempo / 2; 
+                let step = 0;
+                
+                const melody = [
+                    523.25, 0,      587.33, 659.25, 
+                    0,      659.25, 587.33, 523.25, 
+                    392.00, 0,      440.00, 523.25, 
+                    0,      523.25, 587.33, 392.00, 
+                    659.25, 0,      783.99, 880.00, 
+                    0,      880.00, 783.99, 659.25, 
+                    587.33, 0,      523.25, 440.00, 
+                    392.00, 440.00, 523.25, 0       
+                ];
+                
+                const bass = [
+                    130.81, 130.81, 130.81, 130.81, 
+                    196.00, 196.00, 196.00, 196.00, 
+                    220.00, 220.00, 220.00, 220.00, 
+                    174.61, 174.61, 174.61, 174.61, 
+                    130.81, 130.81, 130.81, 130.81, 
+                    196.00, 196.00, 196.00, 196.00, 
+                    174.61, 174.61, 174.61, 174.61, 
+                    196.00, 196.00, 196.00, 196.00  
+                ];
+                
+                const playStep = () => {
+                    if (!this.bgmPlaying || this.muted) return;
+                    
+                    const now = this.ctx.currentTime;
+                    
+                    const melodyFreq = melody[step % melody.length];
+                    if (melodyFreq > 0) {
+                        const oscMel = this.ctx.createOscillator();
+                        const gainMel = this.ctx.createGain();
+                        
+                        oscMel.type = 'triangle';
+                        oscMel.frequency.setValueAtTime(melodyFreq, now);
+                        
+                        gainMel.gain.setValueAtTime(0, now);
+                        gainMel.gain.linearRampToValueAtTime(0.015, now + 0.01);
+                        gainMel.gain.exponentialRampToValueAtTime(0.0001, now + 0.18);
+                        
+                        oscMel.connect(gainMel);
+                        gainMel.connect(this.ctx.destination);
+                        
+                        oscMel.start(now);
+                        oscMel.stop(now + 0.2);
+                        
+                        this.activeOscillators.push({osc: oscMel, gain: gainMel, stopTime: now + 0.2});
+                    }
+                    
+                    if (step % 2 === 0) {
+                        const bassFreq = bass[(Math.floor(step / 2)) % bass.length];
+                        const oscBass = this.ctx.createOscillator();
+                        const gainBass = this.ctx.createGain();
+                        
+                        oscBass.type = 'sine'; 
+                        oscBass.frequency.setValueAtTime(bassFreq, now);
+                        
+                        gainBass.gain.setValueAtTime(0, now);
+                        gainBass.gain.linearRampToValueAtTime(0.025, now + 0.03);
+                        gainBass.gain.exponentialRampToValueAtTime(0.0001, now + 0.35);
+                        
+                        oscBass.connect(gainBass);
+                        gainBass.connect(this.ctx.destination);
+                        
+                        oscBass.start(now);
+                        oscBass.stop(now + 0.4);
+                        
+                        this.activeOscillators.push({osc: oscBass, gain: gainBass, stopTime: now + 0.4});
+                    }
+                    
+                    this.activeOscillators = this.activeOscillators.filter(item => this.ctx.currentTime < item.stopTime);
+                    
+                    step++;
+                    this.bgmTimeout = setTimeout(playStep, stepDuration * 1000);
+                };
+                
+                playStep();
+            },
+            
+            stopAmbientBGM() {
+                this.bgmPlaying = false;
+                if (this.bgmTimeout) {
+                    clearTimeout(this.bgmTimeout);
+                }
+                const now = this.ctx ? this.ctx.currentTime : 0;
+                this.activeOscillators.forEach(item => {
+                    try {
+                        item.gain.gain.cancelScheduledValues(now);
+                        item.gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.15);
+                        item.osc.stop(now + 0.2);
+                    } catch(e) {}
+                });
+                this.activeOscillators = [];
+            },
+            
+            toggleMute() {
+                this.muted = !this.muted;
+                if (this.muted) {
+                    this.stopAmbientBGM();
+                } else {
+                    this.playAmbientBGM();
+                }
+                return this.muted;
+            },
+            
+            playSelect() {
+                if (this.muted) return;
+                try {
+                    this.init();
+                    const now = this.ctx.currentTime;
+                    const notes = [329.63, 392.00, 523.25, 659.25]; 
+                    notes.forEach((freq, idx) => {
+                        const osc = this.ctx.createOscillator();
+                        const gain = this.ctx.createGain();
+                        osc.type = 'sine';
+                        osc.frequency.setValueAtTime(freq, now + idx * 0.07);
+                        
+                        gain.gain.setValueAtTime(0.12, now + idx * 0.07);
+                        gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.07 + 0.15);
+                        
+                        osc.connect(gain);
+                        gain.connect(this.ctx.destination);
+                        osc.start(now + idx * 0.07);
+                        osc.stop(now + idx * 0.07 + 0.2);
+                    });
+                } catch(e) {
+                    console.warn("Audio Context failed to play select sound", e);
+                }
+            },
+            
+            playStep() {
+                if (this.muted) return;
+                try {
+                    this.init();
+                    const now = this.ctx.currentTime;
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(220, now);
+                    osc.frequency.exponentialRampToValueAtTime(110, now + 0.08);
+                    
+                    gain.gain.setValueAtTime(0.15, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+                    
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start(now);
+                    osc.stop(now + 0.1);
+                } catch(e) {
+                    console.warn("Audio Context failed to play step sound", e);
+                }
+            },
+            
+            playDiceRollClick() {
+                if (this.muted) return;
+                try {
+                    this.init();
+                    const now = this.ctx.currentTime;
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(350 + Math.random() * 250, now);
+                    
+                    gain.gain.setValueAtTime(0.06, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
+                    
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start(now);
+                    osc.stop(now + 0.05);
+                } catch(e) {
+                    console.warn("Audio Context failed to play dice roll click sound", e);
+                }
+            },
+            
+            playDiceLanding() {
+                if (this.muted) return;
+                try {
+                    this.init();
+                    const now = this.ctx.currentTime;
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(160, now);
+                    osc.frequency.exponentialRampToValueAtTime(60, now + 0.15);
+                    
+                    gain.gain.setValueAtTime(0.2, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+                    
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start(now);
+                    osc.stop(now + 0.16);
+                } catch(e) {
+                    console.warn("Audio Context failed to play dice landing sound", e);
+                }
+            }
+        };
+
+        // --- STREAMING_CHUNK: Setup player bonuses and configurations ---
+        const BUFFS = [
+            { id: 'points', name: '+5 Poin Awal', icon: '🪙', desc: 'Mendapat tambahan 5 poin gratis langsung di awal permainan.' },
+            { id: 'shield', name: 'Tameng Pelindung Mutlak', icon: '🛡️', desc: 'Melindungi dari tabrakan lawan ATAU rintangan berbahaya apa pun sebanyak 1 kali secara otomatis tanpa perlu suit!' },
+            { id: 'steal', name: 'Pencuri Poin', icon: '🧲', desc: 'Mengambil 5 poin milik lawan sebanyak 1 kali secara otomatis ketika berhasil melewati petak mereka.' },
+            { id: 'life', name: '+1 Nyawa Tambahan', icon: '❤️', desc: 'Memulai petualangan dengan tambahan 1 Nyawa gratis (total 4) untuk kesempatan menyembuhkan luka rintangan!' }
+        ];
+
+        const gegerCilegonQuestions = [
+            { q: "Kapan tepatnya peristiwa Geger Cilegon 1888 meletus?", options: ["9 Juli 1888", "17 Agustus 1945", "10 November 1945", "20 Mei 1908"], a: 0 },
+            { q: "Siapa pemimpin utama perjuangan rakyat Banten dalam Geger Cilegon 1888?", options: ["Pangeran Diponegoro", "Ki Wasyid", "Sultan Ageng Tirtayasa", "Ki Hajar Dewantara"], a: 1 },
+            { q: "Apa tarekat keagamaan yang mempersatukan semangat juang pejuang Geger Cilegon?", options: ["Tarekat Naqsyabandiyah", "Tarekat Qadiriyah wa Naqsyabandiyah", "Tarekat Tijaniyah", "Tarekat Syadziliyah"], a: 1 },
+            { q: "Siapa nama Asisten Residen Belanda di Cilegon yang tewas dalam peristiwa tersebut?", options: ["J.H.H. Gubbels", "Van der Capellen", "Raffles", "Daendels"], a: 0 },
+            { q: "Alat pemanggil ibadah dan berkumpul apa yang sempat dilarang dibunyikan keras oleh Belanda?", options: ["Kentongan", "Gamelan", "Bedug", "Gong"], a: 2 },
+            { q: "Bencana alam dahsyat apa pada tahun 1883 yang merusak ekonomi dan memicu penderitaan rakyat sebelum pemberontakan?", options: ["Gempa bumi Tektonik", "Letusan Gunung Krakatau", "Tsunami Selat Sunda", "Banjir bandang Cilegon"], a: 1 },
+            { q: "Siapa salah satu kiai terkemuka sekutu Ki Wasyid yang memimpin pergerakan pejuang?", options: ["Haji Tubagus Ismail", "K.H. Ahmad Dahlan", "K.H. Hasyim Asy'ari", "Ki Bagus Hadikusumo"], a: 0 },
+            { q: "Sistem pajak kolonial Hindia Belanda yang membebani tanah para petani dikenal dengan istilah...", options: ["Cultuurstelsel", "Landrente (pajak tanah)", "Pajak kepala", "Monopoli dagang"], a: 1 },
+            { q: "Siapa penasihat urusan pribumi kolonial Belanda yang meneliti dampak sosiologis pasca Geger Cilegon?", options: ["Snouck Hurgronje", "Van Deventer", "Douwes Dekker", "Van der Plas"], a: 0 },
+            { q: "Apa pemicu utama kemarahan ulama sehingga pecah perlawanan fisik di Cilegon?", options: ["Perebutan wilayah perkebunan", "Intervensi Belanda terhadap kebebasan ibadah", "Penutupan jalur perdagangan laut", "Kenaikan harga beras impor"], a: 1 },
+            { q: "Setelah perlawanan dipadamkan, pejuang Banten yang tertangkap dijatuhi hukuman...", options: ["Denda uang saja", "Dihukum gantung atau diasingkan", "Menjadi pegawai kolonial", "Dibebaskan tanpa syarat"], a: 1 },
+            { q: "Pemerintah kolonial Belanda mendatangkan tentara bantuan dari mana untuk memadamkan Geger Cilegon?", options: ["Batavia dan Serang", "Semarang dan Surabaya", "Singapura dan Malaysia", "Ambon dan Papua"], a: 0 },
+            { q: "Di manakah letak makam utama tempat ziarah yang dibatasi oleh asisten residen Belanda hingga memicu amarah warga?", options: ["Makam Maulana Hasanuddin", "Makam Ki Wasyid", "Makam di Pulau Panjang", "Makam Syekh Jamaluddin (Kolelet)"], a: 3 }
+        ];
+
+        const gegerCilegonSnippets = [
+            "Geger Cilegon 1888 adalah perlawanan bersenjata yang dipimpin oleh para kiai, haji, dan santri terhadap pemerintah kolonial Hindia Belanda pada 9 Juli 1888 di Cilegon, Banten.",
+            "Latar belakang perlawanan ini sangat kompleks, dipicu oleh penderitaan rakyat akibat dampak letusan Gunung Krakatau (1883), wabah penyakit hewan, hingga kelaparan.",
+            "Pemerintah kolonial Belanda semakin mencekik rakyat Banten dengan menerapkan pajak yang tinggi, seperti pajak kepala, pajak tanah (landrente), hingga pajak perahu.",
+            "Pemicu kemarahan umat Islam adalah intervensi pejabat kolonial terhadap agama, seperti larangan mengumandangkan azan dengan suara keras dan ziarah.",
+            "Tokoh utama perjuangan ini adalah Ki Wasyid. Ia memimpin pertemuan rahasia para ulama Banten untuk merencanakan perlawanan melawan penjajahan.",
+            "Selain Ki Wasyid, tokoh penting lainnya adalah Haji Tubagus Ismail yang turut membakar semangat rakyat Banten untuk bersatu melawan ketidakadilan Belanda.",
+            "Perlawanan dimulai dengan penyerangan ke rumah-rumah pejabat kolonial di Cilegon, menewaskan Asisten Residen J.H.H. Gubbels dan keluarganya.",
+            "Belanda merespons dengan cepat. Mereka mendatangkan tentara tambahan dari Batavia dan Serang yang dipersenjatai lengkap untuk memadamkan perlawanan.",
+            "Setelah perlawanan dipadamkan, Ki Wasyid gugur, dan banyak ulama serta pejuang Banten lainnya yang ditangkap, dihukum gantung, atau dibuang ke pengasingan.",
+            "Akibat Geger Cilegon 1888, Belanda mengubah kebijakan beragama mereka menjadi lebih berhati-hati dengan memanfaatkan nasihat orientalis Snouck Hurgronje."
+        ];
+
+        const npcDialogues = {
+            10: { npc: "Ki Wasyid", text: "Berhenti sejenak, Anak Muda! Aku Ki Wasyid. Perlawanan kami di Cilegon tahun 1888 bukan sekadar amarah, tapi perlawanan atas ketidakadilan kolonial dan pembatasan ibadah kita. Bawa semangat pantang menyerah ini ke garis akhir!" },
+            20: { npc: "Haji Tubagus Ismail", text: "Salam, Pejuang! Aku Haji Tubagus Ismail. Tahukah kamu? Bencana letusan Krakatau 1883 membuat rakyat sangat menderita, namun Belanda justru memeras kami dengan pajak yang mencekik. Geger Cilegon adalah puncak perlawanan kami demi rakyat!" },
+            30: { npc: "Haji Madani", text: "Teruslah maju! Aku Haji Madani. Meski senjata kami seadanya dan banyak tokoh kami gugur atau dibuang ke pengasingan, Geger Cilegon membuktikan keberanian warga Banten melawan penindasan tanpa rasa takut. Kemenangan sudah dekat!" },
+            40: { npc: "Haji Abdurahman", text: "Sedikit lagi! Aku Haji Abdurahman. Ingatlah bahwa perjuangan kami adalah demi kehormatan dan kebebasan. Buktikan ketangguhanmu dan raihlah kemenangan di ujung jalan!" },
+            50: { npc: "Haji Ishak", text: "Luar biasa! Aku Haji Ishak. Perjalananmu sudah hampir mencapai puncaknya. Teruskan semangat juang pantang menyerah ini, jangan biarkan rintangan apapun menghentikan langkahmu menuju kemenangan sejati!" }
+        };
+
+        // --- STREAMING_CHUNK: Declaring state and threeJS parameters ---
+        let players = [];
+        const playerConfigs = [
+            { color: "#ef4444", emoji: "🤠" },
+            { color: "#3b82f6", emoji: "🥷" },
+            { color: "#22c55e", emoji: "🧙‍♂️" },
+            { color: "#eab308", emoji: "🦸‍♀️" }
+        ];
+        
+        let currentPlayerIndex = 0;
+        let isMoving = false;
+        let selectedMode = 1; 
+        let randomizeTries = 3;
+        let currentLevel = 1;
+        let pathData = []; 
+        const sceneryElements = ['🌲', '🌳', '🏕️', '⛰️', '🪵', '🍄', '🌿'];
+
+        let finishChallengeQuestions = [];
+        let currentFinishQuestionIdx = 0;
+        let activeFinishPlayer = null;
+
+        // STATE UTAMA THREE.JS UNTUK MODE SOLO 3D VIEW
+        let scene3D, camera3D, renderer3D;
+        let modelPawn3D, cellMeshes3D = [];
+        let animationFrameId3D = null;
+        let currentCamPos = new THREE.Vector3();
+        let currentCamLookAt = new THREE.Vector3();
+        const gridSpacing3D = 3; 
+
+        let active3DJump = {
+            active: false,
+            startX: 0,
+            startZ: 0,
+            targetX: 0,
+            targetZ: 0,
+            startTime: 0,
+            duration: 300 
+        };
+
+        // Kertas Gunting Batu State
+        let activeKGBPlayer = null;
+        let activeKGBTile = null;
+        let kgbResolvePromise = null;
+
+        // --- STREAMING_CHUNK: Setting mechanics for jumps and levels ---
+        function trigger3DStepJump(fromPosIndex, toPosIndex) {
+            const fromCoord = pathData[fromPosIndex];
+            const toCoord = pathData[toPosIndex];
+            if (!fromCoord || !toCoord) return;
+            const fromPos = gridTo3DSpace(fromCoord.r, fromCoord.c);
+            const toPos = gridTo3DSpace(toCoord.r, toCoord.c);
+            
+            active3DJump.active = true;
+            active3DJump.startX = fromPos.x;
+            active3DJump.startZ = fromPos.z;
+            active3DJump.targetX = toPos.x;
+            active3DJump.targetZ = toPos.z;
+            active3DJump.startTime = performance.now();
+        }
+
+        function getLevelCoords(level) {
+            if (level === 1) {
+                return [
+                    {r:11, c:0}, {r:11, c:1}, {r:11, c:2}, {r:10, c:2}, {r:9, c:2}, {r:8, c:2}, {r:8, c:1}, {r:7, c:1}, {r:6, c:1}, {r:5, c:1}, {r:4, c:1}, {r:3, c:1}, {r:2, c:1}, {r:2, c:2}, {r:2, c:3}, {r:3, c:3}, {r:4, c:3}, {r:5, c:3}, {r:6, c:3}, {r:7, c:3}, {r:8, c:3}, {r:9, c:3}, {r:10, c:3}, {r:10, c:4}, {r:10, c:5}, {r:9, c:5}, {r:8, c:5}, {r:7, c:5}, {r:6, c:5}, {r:5, c:5}, {r:4, c:5}, {r:3, c:5}, {r:2, c:5}, {r:1, c:5}, {r:0, c:5}, {r:0, c:6}, {r:0, c:7}, {r:1, c:7}, {r:2, c:7}, {r:3, c:7}, {r:4, c:7}, {r:5, c:7}, {r:6, c:7}, {r:7, c:7}, {r:8, c:7}, {r:9, c:7}, {r:10, c:7}, {r:11, c:7}, {r:11, c:8}, {r:11, c:9}, {r:10, c:9}, {r:9, c:9}, {r:8, c:9}, {r:8, c:10}, {r:8, c:11}, {r:9, c:11}, {r:10, c:11}, {r:11, c:11}
+                ];
+            } else if (level === 2) {
+                let path = [];
+                for(let c=0; c<=9; c++) path.push({r:11, c});
+                path.push({r:10, c:9});
+                for(let c=9; c>=1; c--) path.push({r:9, c});
+                path.push({r:8, c:1});
+                for(let c=1; c<=9; c++) path.push({r:7, c});
+                path.push({r:6, c:9});
+                for(let c=9; c>=1; c--) path.push({r:5, c});
+                path.push({r:4, c:1});
+                for(let c=1; c<=9; c++) path.push({r:3, c});
+                path.push({r:2, c:9});
+                for(let c=9; c>=1; c--) path.push({r:1, c});
+                path.push({r:0, c:1});
+                for(let c=2; c<=11; c++) path.push({r:0, c});
+                return path;
+            } else {
+                return [
+                    {r:11, c:0}, {r:11, c:1}, {r:11, c:2}, {r:11, c:3}, {r:11, c:4}, {r:11, c:5}, {r:11, c:6}, {r:11, c:7}, {r:11, c:8}, {r:11, c:9}, {r:11, c:10}, {r:11, c:11},
+                    {r:10, c:11}, {r:9, c:11}, {r:8, c:11}, {r:7, c:11}, {r:6, c:11}, {r:5, c:11}, {r:4, c:11}, {r:3, c:11}, {r:2, c:11}, {r:1, c:11}, {r:0, c:11},
+                    {r:0, c:10}, {r:0, c:9}, {r:0, c:8}, {r:0, c:7}, {r:0, c:6}, {r:0, c:5}, {r:0, c:4}, {r:0, c:3}, {r:0, c:2}, {r:0, c:1}, {r:0, c:0},
+                    {r:1, c:0}, {r:2, c:0}, {r:3, c:0}, {r:4, c:0}, {r:5, c:0}, {r:6, c:0}, {r:7, c:0}, {r:8, c:0}, {r:9, c:0},
+                    {r:9, c:1}, {r:9, c:2}, {r:9, c:3}, {r:9, c:4}, {r:9, c:5}, {r:9, c:6}, {r:9, c:7}, {r:9, c:8}, {r:9, c:9},
+                    {r:8, c:9}, {r:7, c:9}, {r:6, c:9}, {r:5, c:9}, {r:4, c:9}, {r:3, c:9}, {r:2, c:9},
+                    {r:2, c:8}, {r:2, c:7}, {r:2, c:6}, {r:2, c:5}, {r:2, c:4}, {r:2, c:3}, {r:2, c:2},
+                    {r:3, c:2}, {r:4, c:2}, {r:5, c:2}, {r:6, c:2}, {r:7, c:2},
+                    {r:7, c:3}, {r:7, c:4}, {r:7, c:5}, {r:7, c:6}, {r:7, c:7},
+                    {r:6, c:7}, {r:5, c:7}, {r:4, c:7},
+                    {r:4, c:6}, {r:4, c:5}, {r:4, c:4},
+                    {r:5, c:4} 
+                ];
+            }
+        }
+
+        // --- STREAMING_CHUNK: Formatting path randomized blocks ---
+        function randomizePath() {
+            const coords = getLevelCoords(currentLevel);
+            pathData = [];
+            
+            pathData.push({ r: coords[0].r, c: coords[0].c, type: 'start' });
+            
+            let middleCount = coords.length - 2;
+            let tileTypes = [];
+            
+            let numTreasures = Math.floor(middleCount * 0.22);
+            let numSafeZones = Math.floor(middleCount * 0.08);
+            let numTraps = Math.floor(middleCount * 0.08);
+            let numBonus = Math.floor(middleCount * 0.08);
+            let numPenalties = Math.floor(middleCount * 0.08);
+            let numRestarts = Math.floor(middleCount * 0.04);
+            let numLightnings = 2;
+            
+            for(let i=0; i<numTreasures; i++) tileTypes.push({type: 'treasure'});
+            for(let i=0; i<numSafeZones; i++) tileTypes.push({type: 'safe'});
+            for(let i=0; i<numTraps; i++) tileTypes.push({type: 'trap', val: -3});
+            for(let i=0; i<numBonus; i++) tileTypes.push({type: 'bonus', val: 15});
+            for(let i=0; i<numPenalties; i++) tileTypes.push({type: 'penalty', val: -5});
+            for(let i=0; i<numRestarts; i++) tileTypes.push({type: 'restart'});
+            for(let i=0; i<numLightnings; i++) tileTypes.push({type: 'lightning'});
+            
+            while(tileTypes.length < middleCount - 5) { 
+                tileTypes.push({type: 'normal'});
+            }
+            
+            for (let i = tileTypes.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [tileTypes[i], tileTypes[j]] = [tileTypes[j], tileTypes[i]];
+            }
+            
+            for(let i = 1; i <= middleCount; i++) {
+                const coord = coords[i];
+                
+                let tile;
+                if (i === 10 || i === 20 || i === 30 || i === 40 || i === 50) {
+                    tile = { type: 'gate', val: 0 };
+                } else if (i === 15 || i === 25) {
+                    tile = { type: 'shortcut', val: 4 };
+                } else {
+                    tile = tileTypes.pop() || {type: 'normal', val: 0};
+                }
+                
+                pathData.push({
+                    r: coord.r,
+                    c: coord.c,
+                    type: tile.type,
+                    val: tile.val || 0
+                });
+            }
+            
+            pathData.push({ r: coords[coords.length - 1].r, c: coords[coords.length - 1].c, type: 'finish' });
+        }
+
+        // --- STREAMING_CHUNK: Setup board interface layout ---
+        function initBoard() {
+            const board = document.getElementById('game-board');
+            board.innerHTML = ''; 
+            
+            if (pathData.length === 0) {
+                randomizePath();
+            }
+            
+            document.getElementById('level-display-badge').innerText = `Level ${currentLevel}`;
+
+            let gridLayout = [];
+            for(let i=0; i<12; i++) {
+                gridLayout[i] = new Array(12).fill(null);
+            }
+
+            pathData.forEach((pd, index) => {
+                gridLayout[pd.r][pd.c] = { isPath: true, index: index, data: pd };
+            });
+
+            for(let r = 0; r < 12; r++) {
+                for(let c = 0; c < 12; c++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'cell';
+                    if (r === 5 || r === 6) cell.classList.add('river');
+
+                    const cellData = gridLayout[r][c];
+                    
+                    if (cellData && cellData.isPath) {
+                        cell.classList.add('path');
+                        if (r === 5 || r === 6) cell.classList.add('bridge');
+                        if (cellData.data.type === 'safe') cell.classList.add('safe');
+                        
+                        cell.id = `cell-${cellData.index}`;
+                        
+                        let icon = '';
+                        if(cellData.data.type === 'start') { cell.classList.add('start'); icon = '🏁'; }
+                        else if(cellData.data.type === 'finish') { cell.classList.add('finish'); icon = '🏆'; }
+                        else if(cellData.data.type === 'treasure') icon = '💰';
+                        else if(cellData.data.type === 'trap') icon = '⚠️';
+                        else if(cellData.data.type === 'bonus') icon = '⭐';
+                        else if(cellData.data.type === 'shortcut') icon = '🔄';
+                        else if(cellData.data.type === 'penalty') icon = '♨️';
+                        else if(cellData.data.type === 'restart') icon = '☣️';
+                        else if(cellData.data.type === 'safe') icon = '🛡️';
+                        else if(cellData.data.type === 'lightning') icon = '⚡';
+                        else if(cellData.data.type === 'gate') icon = '⛩️';
+
+                        if(icon) {
+                            const span = document.createElement('span');
+                            span.className = 'cell-content';
+                            span.innerText = icon;
+                            cell.appendChild(span);
+                        }
+                    } else {
+                        cell.classList.add('land');
+                        if ((r + c) % 2 === 0) cell.classList.add('land-alt');
+
+                        if (Math.random() > 0.4 && !(r === 5 || r === 6)) {
+                            cell.classList.add('scenery');
+                            cell.innerText = sceneryElements[Math.floor(Math.random() * sceneryElements.length)];
+                        }
+                    }
+                    board.appendChild(cell);
+                }
+            }
+
+            players.forEach(p => {
+                const pawn = document.createElement('div');
+                pawn.className = 'pawn';
+                pawn.id = `pawn-${p.id}`;
+                pawn.style.backgroundColor = p.color;
+                pawn.innerText = p.emoji;
+                board.appendChild(pawn);
+            });
+
+            updateAllPawnsVisuals();
+            updateLeaderboard();
+            updateTurnUI();
+        }
+
+        // --- STREAMING_CHUNK: Setup 3D conversion spaces ---
+        function gridTo3DSpace(r, c) {
+            const halfGrid = 5.5; 
+            const x = (c - halfGrid) * gridSpacing3D;
+            const z = (r - halfGrid) * gridSpacing3D;
+            return { x, z };
+        }
+
+        function createEmojiSprite(emoji) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 128;
+            canvas.height = 128;
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, 128, 128); 
+            ctx.font = '96px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(emoji, 64, 64);
+
+            const texture = new THREE.CanvasTexture(canvas);
+            const material = new THREE.SpriteMaterial({ 
+                map: texture, 
+                transparent: true,
+                depthWrite: false, 
+                depthTest: true
+            });
+            const sprite = new THREE.Sprite(material);
+            sprite.scale.set(1.8, 1.8, 1);
+            return sprite;
+        }
+
+        // --- STREAMING_CHUNK: Setup threeJS visual systems ---
+        function init3D() {
+            const container = document.getElementById('canvas-3d-container');
+            container.innerHTML = ''; 
+
+            const width = container.clientWidth;
+            const height = container.clientHeight || 450;
+
+            scene3D = new THREE.Scene();
+            scene3D.background = new THREE.Color(0x0f172a); 
+            scene3D.fog = new THREE.FogExp2(0x0f172a, 0.02);
+
+            camera3D = new THREE.PerspectiveCamera(50, width / height, 0.1, 1000);
+
+            renderer3D = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+            renderer3D.setSize(width, height);
+            renderer3D.shadowMap.enabled = true;
+            renderer3D.shadowMap.type = THREE.PCFSoftShadowMap;
+            container.appendChild(renderer3D.domElement);
+
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+            scene3D.add(ambientLight);
+
+            const hemiLight = new THREE.HemisphereLight(0x4ade80, 0x1e293b, 0.4);
+            scene3D.add(hemiLight);
+
+            const dirLight = new THREE.DirectionalLight(0xfffbeb, 0.9);
+            dirLight.position.set(15, 30, 20);
+            dirLight.castShadow = true;
+            dirLight.shadow.mapSize.width = 1024;
+            dirLight.shadow.mapSize.height = 1024;
+            dirLight.shadow.camera.near = 0.5;
+            dirLight.shadow.camera.far = 100;
+            const d = 30;
+            dirLight.shadow.camera.left = -d;
+            dirLight.shadow.camera.right = d;
+            dirLight.shadow.camera.top = d;
+            dirLight.shadow.camera.bottom = -d;
+            scene3D.add(dirLight);
+
+            cellMeshes3D = [];
+            const pathLookup = {};
+            pathData.forEach((p, idx) => {
+                pathLookup[`${p.r}_${p.c}`] = { data: p, index: idx };
+            });
+
+            const riverGeo = new THREE.PlaneGeometry(100, 100);
+            const riverMat = new THREE.MeshStandardMaterial({ 
+                color: 0x38bdf8, 
+                roughness: 0.1, 
+                metalness: 0.2, 
+                transparent: true, 
+                opacity: 0.85 
+            });
+            const riverMesh = new THREE.Mesh(riverGeo, riverMat);
+            riverMesh.rotation.x = -Math.PI / 2;
+            riverMesh.position.y = -0.6;
+            scene3D.add(riverMesh);
+
+            for (let r = 0; r < 12; r++) {
+                for (let c = 0; c < 12; c++) {
+                    const pos = gridTo3DSpace(r, c);
+                    const cellKey = `${r}_${c}`;
+                    const pathObj = pathLookup[cellKey];
+
+                    if (pathObj) {
+                        const tileType = pathObj.data.type;
+                        let tileColor = 0xf4d068; 
+                        let ubinHeight = 0.4;
+                        
+                        if (tileType === 'start') tileColor = 0x22c55e;
+                        else if (tileType === 'finish') tileColor = 0xef4444;
+                        else if (tileType === 'safe') tileColor = 0x94a3b8;
+                        else if (tileType === 'trap') tileColor = 0xf59e0b;
+                        else if (tileType === 'bonus') tileColor = 0x10b981;
+                        else if (tileType === 'penalty') tileColor = 0xef4444;
+                        else if (tileType === 'restart') tileColor = 0xd946ef;
+                        else if (tileType === 'lightning') tileColor = 0x3b82f6;
+
+                        let tileGeo;
+                        let tileMat;
+                        if (r === 5 || r === 6) {
+                            tileGeo = new THREE.BoxGeometry(2.8, 0.4, 2.6);
+                            tileMat = new THREE.MeshStandardMaterial({ color: 0x8b5a2b, roughness: 0.9 }); 
+                        } else {
+                            tileGeo = new THREE.BoxGeometry(2.6, ubinHeight, 2.6);
+                            tileMat = new THREE.MeshStandardMaterial({ color: tileColor, roughness: 0.7 });
+                        }
+
+                        const tileMesh = new THREE.Mesh(tileGeo, tileMat);
+                        tileMesh.position.set(pos.x, ubinHeight/2 - 0.2, pos.z);
+                        tileMesh.receiveShadow = true;
+                        tileMesh.castShadow = true;
+                        scene3D.add(tileMesh);
+
+                        cellMeshes3D[pathObj.index] = tileMesh;
+
+                        let extraMesh = null;
+                        if (tileType === 'gate') {
+                            const gateGroup = new THREE.Group();
+                            
+                            const pillarGeo = new THREE.CylinderGeometry(0.1, 0.1, 1.8, 8);
+                            const pillarMat = new THREE.MeshStandardMaterial({ color: 0xe11d48, roughness: 0.5 });
+                            
+                            const pillarL = new THREE.Mesh(pillarGeo, pillarMat);
+                            pillarL.position.set(-0.8, 0.9, 0);
+                            const pillarR = pillarL.clone();
+                            pillarR.position.set(0.8, 0.9, 0);
+                            
+                            const beamGeo = new THREE.BoxGeometry(2.2, 0.15, 0.2);
+                            const beamMat = new THREE.MeshStandardMaterial({ color: 0xe11d48, roughness: 0.5 });
+                            const beam = new THREE.Mesh(beamGeo, beamMat);
+                            beam.position.set(0, 1.8, 0);
+
+                            gateGroup.add(pillarL);
+                            gateGroup.add(pillarR);
+                            gateGroup.add(beam);
+                            gateGroup.position.set(pos.x, 0, pos.z);
+                            scene3D.add(gateGroup);
+                        } else if (tileType === 'finish') {
+                            const cupGeo = new THREE.CylinderGeometry(0.6, 0.3, 1, 8);
+                            const cupMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, metalness: 0.8 });
+                            extraMesh = new THREE.Mesh(cupGeo, cupMat);
+                            extraMesh.position.set(pos.x, 0.8, pos.z);
+                            scene3D.add(extraMesh);
+                        }
+
+                        if (extraMesh) {
+                            extraMesh.castShadow = true;
+                            tileMesh.userData.childFeature = extraMesh;
+                        }
+
+                        let icon = '';
+                        if (tileType === 'start') icon = '🏁';
+                        else if (tileType === 'finish') icon = '🏆';
+                        else if (tileType === 'treasure') icon = '💰';
+                        else if (tileType === 'trap') icon = '⚠️';
+                        else if (tileType === 'bonus') icon = '⭐';
+                        else if (tileType === 'shortcut') icon = '🔄';
+                        else if (tileType === 'penalty') icon = '♨️';
+                        else if (tileType === 'restart') icon = '☣️';
+                        else if (tileType === 'safe') icon = '🛡️';
+                        else if (tileType === 'lightning') icon = '⚡';
+                        else if (tileType === 'gate') icon = '⛩️';
+
+                        if (icon) {
+                            const sprite = createEmojiSprite(icon);
+                            sprite.position.set(pos.x, 1.4, pos.z);
+                            scene3D.add(sprite);
+                            tileMesh.userData.sprite = sprite;
+                        }
+
+                    } else {
+                        const isAlt = (r + c) % 2 === 0;
+                        const landHeight = 0.2 + (Math.random() * 0.1);
+                        const landGeo = new THREE.BoxGeometry(2.8, landHeight, 2.8);
+                        const landMat = new THREE.MeshStandardMaterial({ 
+                            color: isAlt ? 0x22c55e : 0x4ade80, 
+                            roughness: 0.9 
+                        });
+                        const landMesh = new THREE.Mesh(landGeo, landMat);
+                        landMesh.position.set(pos.x, landHeight/2 - 0.4, pos.z);
+                        landMesh.receiveShadow = true;
+                        scene3D.add(landMesh);
+
+                        if (Math.random() > 0.6 && !(r === 5 || r === 6)) {
+                            const sceneryGroup = new THREE.Group();
+                            const trunkGeo = new THREE.CylinderGeometry(0.12, 0.16, 0.8, 8);
+                            const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5c3a21, roughness: 0.9 });
+                            const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+                            trunk.position.y = 0.4;
+                            sceneryGroup.add(trunk);
+
+                            const leavesGeo = new THREE.ConeGeometry(0.7, 1.4, 8);
+                            const leavesMat = new THREE.MeshStandardMaterial({ color: 0x15803d, roughness: 0.8 });
+                            const leaves = new THREE.Mesh(leavesGeo, leavesMat);
+                            leaves.position.y = 1.3;
+                            sceneryGroup.add(leaves);
+
+                            sceneryGroup.position.set(pos.x + (Math.random() * 0.4 - 0.2), 0, pos.z + (Math.random() * 0.4 - 0.2));
+                            scene3D.add(sceneryGroup);
+                        }
+                    }
+                }
+            }
+
+            const pawnGroup = new THREE.Group();
+            const player = players[0]; 
+            const playerColorHex = player ? parseInt(player.color.replace('#', '0x')) : 0xef4444;
+
+            const bodyGeo = new THREE.CylinderGeometry(0.4, 0.5, 0.9, 12);
+            const bodyMat = new THREE.MeshStandardMaterial({ color: playerColorHex, roughness: 0.5 });
+            const body = new THREE.Mesh(bodyGeo, bodyMat);
+            body.position.y = 0.45;
+            body.castShadow = true;
+            pawnGroup.add(body);
+
+            const headGeo = new THREE.SphereGeometry(0.35, 16, 16);
+            const headMat = new THREE.MeshStandardMaterial({ color: 0xffdbac, roughness: 0.6 }); 
+            const head = new THREE.Mesh(headGeo, headMat);
+            head.position.y = 1.05;
+            head.castShadow = true;
+            pawnGroup.add(head);
+
+            const brimGeo = new THREE.CylinderGeometry(0.7, 0.7, 0.05, 16);
+            const hatMat = new THREE.MeshStandardMaterial({ color: 0xb45309, roughness: 0.9 }); 
+            const brim = new THREE.Mesh(brimGeo, hatMat);
+            brim.position.y = 1.3;
+            pawnGroup.add(brim);
+
+            const crownGeo = new THREE.CylinderGeometry(0.4, 0.45, 0.4, 16);
+            const crown = new THREE.Mesh(crownGeo, hatMat);
+            crown.position.y = 1.5;
+            pawnGroup.add(crown);
+
+            const light = new THREE.PointLight(0xfffbeb, 0.6, 5);
+            light.position.y = 1.2;
+            pawnGroup.add(light);
+
+            scene3D.add(pawnGroup);
+            modelPawn3D = pawnGroup;
+
+            active3DJump.active = false;
+            const startPos = gridTo3DSpace(pathData[0].r, pathData[0].c);
+            modelPawn3D.position.set(startPos.x, 0.2, startPos.z);
+            modelPawn3D.scale.set(1.0, 1.0, 1.0);
+
+            camera3D.position.set(startPos.x, 8, startPos.z + 10);
+            camera3D.lookAt(new THREE.Vector3(startPos.x, 0.5, startPos.z));
+
+            currentCamPos.copy(camera3D.position);
+            currentCamLookAt.set(startPos.x, 0.5, startPos.z);
+
+            if (animationFrameId3D) cancelAnimationFrame(animationFrameId3D);
+            animate3D();
+        }
+
+        // --- STREAMING_CHUNK: Setup loop renderer updates ---
+        function animate3D() {
+            animationFrameId3D = requestAnimationFrame(animate3D);
+
+            const player = players[0]; 
+            if (player && modelPawn3D) {
+                let px = 0, pz = 0, py = 0.2;
+                let scaleY = 1.0, scaleXZ = 1.0;
+                
+                if (active3DJump.active) {
+                    const now = performance.now();
+                    const elapsed = now - active3DJump.startTime;
+                    let t = elapsed / active3DJump.duration;
+                    
+                    if (t >= 1.0) {
+                        t = 1.0;
+                        active3DJump.active = false;
+                        scaleY = 0.75;
+                        scaleXZ = 1.15;
+                    } else {
+                        py = 0.2 + Math.sin(t * Math.PI) * 1.5;
+                        const stretch = Math.sin(t * Math.PI) * 0.25;
+                        scaleY = 1.0 + stretch;
+                        scaleXZ = 1.0 - stretch * 0.5;
+                    }
+                    
+                    px = active3DJump.startX + (active3DJump.targetX - active3DJump.startX) * t;
+                    pz = active3DJump.startZ + (active3DJump.targetZ - active3DJump.startZ) * t;
+                    
+                    modelPawn3D.position.set(px, py, pz);
+                    modelPawn3D.scale.set(scaleXZ, scaleY, scaleXZ);
+                } else {
+                    const targetCoord = pathData[player.position];
+                    const targetPos = gridTo3DSpace(targetCoord.r, targetCoord.c);
+                    
+                    modelPawn3D.position.x += (targetPos.x - modelPawn3D.position.x) * 0.2;
+                    modelPawn3D.position.z += (targetPos.z - modelPawn3D.position.z) * 0.2;
+                    modelPawn3D.position.y += (0.2 - modelPawn3D.position.y) * 0.2;
+                    
+                    modelPawn3D.scale.x += (1.0 - modelPawn3D.scale.x) * 0.2;
+                    modelPawn3D.scale.y += (1.0 - modelPawn3D.scale.y) * 0.2;
+                    modelPawn3D.scale.z += (1.0 - modelPawn3D.scale.z) * 0.2;
+                }
+
+                const time = Date.now() * 0.003;
+                scene3D.traverse((child) => {
+                    if (child.userData && child.userData.childFeature) {
+                        child.userData.childFeature.rotation.y += 0.02;
+                    }
+                    if (child instanceof THREE.Sprite) {
+                        child.position.y = 1.4 + Math.sin(time + child.position.x + child.position.z) * 0.15;
+                    }
+                });
+
+                let nextPos = new THREE.Vector3();
+                let dir = new THREE.Vector3(0, 0, -1); 
+
+                if (player.position < pathData.length - 1) {
+                    const nextCoord = pathData[player.position + 1];
+                    const nextWorld = gridTo3DSpace(nextCoord.r, nextCoord.c);
+                    nextPos.set(nextWorld.x, 0.2, nextWorld.z);
+                    dir.subVectors(nextPos, modelPawn3D.position).normalize();
+                } else if (player.position > 0) {
+                    const prevCoord = pathData[player.position - 1];
+                    const prevWorld = gridTo3DSpace(prevCoord.r, prevCoord.c);
+                    const prevPos = new THREE.Vector3(prevWorld.x, 0.2, prevWorld.z);
+                    dir.subVectors(modelPawn3D.position, prevPos).normalize();
+                }
+
+                const distanceBehind = 6.5; 
+                const heightAbove = 4.0;
+                
+                const targetCamX = modelPawn3D.position.x - dir.x * distanceBehind;
+                const targetCamZ = modelPawn3D.position.z - dir.z * distanceBehind;
+                const targetCamY = modelPawn3D.position.y + heightAbove;
+
+                currentCamPos.x += (targetCamX - currentCamPos.x) * 0.06;
+                currentCamPos.y += (targetCamY - currentCamPos.y) * 0.06;
+                currentCamPos.z += (targetCamZ - currentCamPos.z) * 0.06;
+
+                camera3D.position.copy(currentCamPos);
+
+                const targetLookAtX = modelPawn3D.position.x + dir.x * 2.0;
+                const targetLookAtZ = modelPawn3D.position.z + dir.z * 2.0;
+                const targetLookAtY = modelPawn3D.position.y + 0.5;
+
+                currentCamLookAt.x += (targetLookAtX - currentCamLookAt.x) * 0.08;
+                currentCamLookAt.y += (targetLookAtY - currentCamLookAt.y) * 0.08;
+                currentCamLookAt.z += (targetLookAtZ - currentCamLookAt.z) * 0.08;
+
+                camera3D.lookAt(currentCamLookAt);
+            }
+
+            renderer3D.render(scene3D, camera3D);
+        }
+
+        function getCellPosition(index) {
+            const cell = document.getElementById(`cell-${index}`);
+            if(!cell) return { top: 0, left: 0, width: 0, height: 0 };
+            return {
+                top: cell.offsetTop,
+                left: cell.offsetLeft,
+                width: cell.offsetWidth,
+                height: cell.offsetHeight
+            };
+        }
+
+        // --- STREAMING_CHUNK: Setup pawn viewport sync functions ---
+        function updateAllPawnsVisuals() {
+            if (selectedMode === 1) {
+                return;
+            }
+
+            let positions = {};
+            players.forEach(p => {
+                if(!positions[p.position]) positions[p.position] = [];
+                positions[p.position].push(p.id);
+            });
+
+            players.forEach(p => {
+                const pawn = document.getElementById(`pawn-${p.id}`);
+                if (!pawn) return;
+                const rect = getCellPosition(p.position);
+                
+                const pWidth = Math.min(35, rect.width * 0.75); 
+                pawn.style.width = `${pWidth}px`;
+                pawn.style.height = `${pWidth}px`;
+                pawn.style.fontSize = `${pWidth * 0.5}px`;
+                
+                const siblings = positions[p.position];
+                const myIndex = siblings.indexOf(p.id);
+                
+                let offsetX = 0, offsetY = 0;
+                if(siblings.length > 1) {
+                    const scale = pWidth / 35;
+                    const offsetMap = [
+                        {x: -10 * scale, y: -10 * scale}, 
+                        {x: 10 * scale, y: -10 * scale}, 
+                        {x: -10 * scale, y: 10 * scale}, 
+                        {x: 10 * scale, y: 10 * scale},
+                        {x: 0, y: 0}, 
+                        {x: 0, y: -15 * scale}
+                    ];
+                    offsetX = offsetMap[myIndex]?.x || 0;
+                    offsetY = offsetMap[myIndex]?.y || 0;
+                }
+
+                pawn.style.top = `${rect.top + (rect.height / 2) - (pWidth / 2) + offsetY}px`;
+                pawn.style.left = `${rect.left + (rect.width / 2) - (pWidth / 2) + offsetX}px`;
+            });
+        }
+
+        window.addEventListener('resize', () => {
+            if (selectedMode === 1 && renderer3D && camera3D) {
+                const container = document.getElementById('canvas-3d-container');
+                const width = container.clientWidth;
+                const height = container.clientHeight || 450;
+                camera3D.aspect = width / height;
+                camera3D.updateProjectionMatrix();
+                renderer3D.setSize(width, height);
+            } else {
+                setTimeout(updateAllPawnsVisuals, 100);
+            }
+        });
+
+        window.addEventListener('orientationchange', () => {
+            setTimeout(updateAllPawnsVisuals, 300);
+        });
+
+        // --- STREAMING_CHUNK: Formatting scoreboard and HUD status bar ---
+        function updateLeaderboard() {
+            const tbody = document.getElementById('leaderboard-body');
+            tbody.innerHTML = '';
+            
+            players.forEach(p => {
+                const tr = document.createElement('tr');
+                tr.className = `score-row ${p.id === currentPlayerIndex ? 'active' : ''}`;
+                
+                let lifeHtml = p.hasLife > 0 ? `<span class="life-badge">❤️ x${p.hasLife}</span>` : '<span class="life-badge bg-rose-200 text-rose-700">☠️ 0</span>';
+                let shieldHtml = p.hasShield ? `<span class="inline-block ml-1 bg-sky-100 border border-sky-300 rounded-full px-1.5 py-0.5 text-[10px] text-sky-800 font-extrabold" title="Tameng Aktif">🛡️ TAMENG</span>` : '';
+
+                let buffHtml = '';
+                if (p.buff) {
+                    let buffActive = true;
+                    if (p.buff.id === 'shield' && !p.hasShield) buffActive = false;
+                    if (p.buff.id === 'steal' && !p.hasSteal) buffActive = false;
+                    
+                    buffHtml = `
+                        <span class="inline-block ml-1 bg-amber-100 border border-amber-300 rounded-full px-1.5 py-0.5 text-xs cursor-help ${buffActive ? 'opacity-100' : 'opacity-30 line-through'}" 
+                              title="${p.buff.name}: ${p.buff.desc}" 
+                              onclick="showInfoModal('${p.buff.icon} ${p.buff.name}', '${p.buff.desc}')">
+                            ${p.buff.icon}
+                        </span>
+                    `;
+                }
+
+                tr.innerHTML = `
+                    <td>
+                        <div class="flex items-center gap-2">
+                            <div class="w-6 h-6 rounded-full border-2 border-slate-700 flex justify-center items-center text-xs" style="background:${p.color}">${p.emoji}</div>
+                            ${p.name} ${lifeHtml} ${shieldHtml} ${buffHtml}
+                        </div>
+                    </td>
+                    <td class="text-center font-bold text-slate-500">${p.snippetsCollected || 0}</td>
+                    <td>${p.score}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function updateTurnUI() {
+            if(players.length === 0) return;
+            const p = players[currentPlayerIndex];
+            const indicator = document.getElementById('turn-indicator');
+            indicator.innerText = `Giliran: ${p.name}`;
+            indicator.style.backgroundColor = p.color;
+
+            const hud = document.getElementById('hud-lives');
+            if (hud) {
+                document.getElementById('hud-player-emoji').innerText = p.emoji;
+                document.getElementById('hud-player-name').innerText = p.name;
+                
+                const heartsContainer = document.getElementById('hud-hearts');
+                heartsContainer.innerHTML = '';
+                for (let i = 0; i < p.hasLife; i++) {
+                    heartsContainer.innerHTML += '❤️';
+                }
+                if (p.hasLife === 0) {
+                    heartsContainer.innerHTML = '<span class="text-xs text-rose-500 font-extrabold tracking-wider animate-pulse">KRITIS</span>';
+                }
+            }
+            
+            updateLeaderboard();
+        }
+
+        const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+        // --- STREAMING_CHUNK: Setup rock-paper-scissors minigame logic ---
+        function startKGBChallenge(player, tile) {
+            return new Promise((resolve) => {
+                activeKGBPlayer = player;
+                activeKGBTile = tile;
+                kgbResolvePromise = resolve;
+                
+                document.getElementById('kgb-player-hand').innerText = '✊';
+                document.getElementById('kgb-opponent-hand').innerText = '✊';
+                document.getElementById('kgb-feedback').classList.add('hidden');
+                
+                const choiceBtns = document.querySelectorAll('#kgb-choices button');
+                choiceBtns.forEach(btn => btn.disabled = false);
+
+                document.getElementById('kgb-modal').classList.add('show');
+            });
+        }
+
+        async function playKGB(playerChoice) {
+            AudioHelper.playSelect();
+            const choiceBtns = document.querySelectorAll('#kgb-choices button');
+            choiceBtns.forEach(btn => btn.disabled = true);
+
+            const handEmojis = { batu: '✊', kertas: '🖐️', gunting: '✌️' };
+            const choices = ['batu', 'kertas', 'gunting'];
+            
+            const playerHand = document.getElementById('kgb-player-hand');
+            const oppHand = document.getElementById('kgb-opponent-hand');
+            const feedback = document.getElementById('kgb-feedback');
+            
+            playerHand.innerText = '✊';
+            oppHand.innerText = '✊';
+            playerHand.classList.add('animate-bounce');
+            oppHand.classList.add('animate-bounce');
+            
+            await sleep(1000);
+            
+            playerHand.classList.remove('animate-bounce');
+            oppHand.classList.remove('animate-bounce');
+
+            const oppChoice = choices[Math.floor(Math.random() * 3)];
+            playerHand.innerText = handEmojis[playerChoice];
+            oppHand.innerText = handEmojis[oppChoice];
+
+            let result = ''; 
+            if (playerChoice === oppChoice) {
+                result = 'draw';
+            } else if (
+                (playerChoice === 'batu' && oppChoice === 'gunting') ||
+                (playerChoice === 'kertas' && oppChoice === 'batu') ||
+                (playerChoice === 'gunting' && oppChoice === 'kertas')
+            ) {
+                result = 'win';
+            } else {
+                result = 'lose';
+            }
+
+            feedback.classList.remove('hidden');
+            if (result === 'draw') {
+                feedback.innerText = '🔄 SERI! Mempersiapkan tanding ulang...';
+                feedback.className = 'font-bold text-lg mt-4 text-yellow-600 animate-pulse text-center';
+                AudioHelper.playDiceLanding();
+                await sleep(1500);
+                choiceBtns.forEach(btn => btn.disabled = false);
+                feedback.classList.add('hidden');
+            } else if (result === 'win') {
+                feedback.innerText = '🎉 KAMU MENANG! Berhasil menepis efek rintangan!';
+                feedback.className = 'font-bold text-lg mt-4 text-green-600 animate-bounce text-center';
+                AudioHelper.playSelect();
+                await sleep(2000);
+                document.getElementById('kgb-modal').classList.remove('show');
+                kgbResolvePromise('win');
+            } else {
+                feedback.innerText = '😭 KAMU KALAH! Efek rintangan langsung berlaku!';
+                feedback.className = 'font-bold text-lg mt-4 text-red-600 text-center';
+                AudioHelper.playDiceLanding();
+                await sleep(2000);
+                document.getElementById('kgb-modal').classList.remove('show');
+                kgbResolvePromise('lose');
+            }
+        }
+
+        // --- STREAMING_CHUNK: Setup dice rolling controls (for multiplayer context) ---
+        document.getElementById('btn-roll').addEventListener('click', async () => {
+            if (isMoving || selectedMode === 1) return;
+            isMoving = true;
+            
+            const btn = document.getElementById('btn-roll');
+            const dice = document.getElementById('dice');
+            btn.disabled = true;
+            
+            dice.classList.add('rolling');
+            let finalRoll = 1;
+            for(let i=0; i<15; i++) {
+                finalRoll = Math.floor(Math.random() * 6) + 1;
+                dice.innerText = finalRoll;
+                AudioHelper.playDiceRollClick(); 
+                await sleep(50);
+            }
+            dice.classList.remove('rolling');
+            AudioHelper.playDiceLanding(); 
+            
+            await sleep(300);
+            await moveActivePlayer(finalRoll);
+        });
+
+        async function moveActivePlayer(steps) {
+            const p = players[currentPlayerIndex];
+            p.stoleThisTurn = null; 
+            p.gainedShieldThisTurn = false;
+            let passedNPCs = [];
+            
+            for(let i = 0; i < steps; i++) {
+                if(p.position < pathData.length - 1) {
+                    p.position++;
+                    updateAllPawnsVisuals();
+                    AudioHelper.playStep(); 
+                    
+                    if (pathData[p.position].type === 'safe') {
+                        if (!p.hasShield) {
+                            p.hasShield = true;
+                            p.gainedShieldThisTurn = true;
+                        }
+                    }
+                    
+                    if (pathData[p.position].type === 'gate') {
+                        if (npcDialogues[p.position]) {
+                            passedNPCs.push(npcDialogues[p.position]);
+                        } else {
+                            passedNPCs.push({ npc: "Tokoh Banten", text: "Teruslah melangkah, jangan lupakan sejarah perjuangan rakyat Banten!" });
+                        }
+                    }
+                    
+                    if (p.buff && p.buff.id === 'steal' && p.hasSteal) {
+                        let opponentsOnCell = players.filter(opp => opp.id !== p.id && opp.position === p.position);
+                        if (opponentsOnCell.length > 0) {
+                            let target = opponentsOnCell[0];
+                            p.hasSteal = false;
+                            target.score = Math.max(0, target.score - 5);
+                            p.score += 5;
+                            p.stoleThisTurn = target.name;
+                            AudioHelper.playSelect();
+                        }
+                    }
+                    
+                    await sleep(300);
+                }
+            }
+            
+            if (p.stoleThisTurn) {
+                await new Promise(resolve => {
+                    showInfoModal(
+                        '🧲 REBUT POIN!',
+                        `${p.name} mengaktifkan buff Pencuri Poin dan sukses merebut 5 Poin milik ${p.stoleThisTurn} saat melewatinya!`,
+                        resolve
+                    );
+                });
+            }
+            
+            for (let npc of passedNPCs) {
+                AudioHelper.playSelect();
+                await new Promise(resolve => {
+                    showInfoModal(
+                        `⛩️ GERBANG: ${npc.npc}`,
+                        `"${npc.text}"`,
+                        resolve
+                    );
+                });
+            }
+            
+            await handleTileAction(p);
+        }
+
+        function setDPadState(enabled) {
+            const buttons = document.querySelectorAll('#control-solo button');
+            buttons.forEach(btn => btn.disabled = !enabled);
+        }
+
+        // --- STREAMING_CHUNK: Setting keyboard and tactile controls ---
+        async function handleForwardInput() {
+            if (isMoving || selectedMode !== 1) return;
+            const p = players[0];
+            if (!p || p.position >= pathData.length - 1) return;
+
+            isMoving = true;
+            setDPadState(false);
+            p.gainedShieldThisTurn = false;
+            
+            try {
+                const prevPosition = p.position;
+                p.position++;
+
+                trigger3DStepJump(prevPosition, p.position);
+                updateAllPawnsVisuals();
+                AudioHelper.playStep();
+
+                if (pathData[p.position].type === 'safe') {
+                    if (!p.hasShield) {
+                        p.hasShield = true;
+                        p.gainedShieldThisTurn = true;
+                    }
+                }
+
+                let passedNPCs = [];
+                if (pathData[p.position].type === 'gate') {
+                    if (npcDialogues[p.position]) {
+                        passedNPCs.push(npcDialogues[p.position]);
+                    }
+                }
+
+                await sleep(320); 
+
+                for (let npc of passedNPCs) {
+                    AudioHelper.playSelect();
+                    await new Promise(resolve => {
+                        showInfoModal(
+                            `⛩️ GERBANG: ${npc.npc}`,
+                            `"${npc.text}"`,
+                            resolve
+                        );
+                    });
+                }
+
+                await handleTileAction(p);
+            } catch(e) {
+                console.error("Kesalahan gerakan:", e);
+                isMoving = false;
+                setDPadState(true);
+            }
+        }
+
+        window.addEventListener('keydown', (e) => {
+            if (selectedMode !== 1) return;
+            if (isMoving) return;
+            if (['ArrowUp', 'w', 'W'].includes(e.key)) {
+                e.preventDefault();
+                handleForwardInput();
+            }
+        });
+
+        // --- STREAMING_CHUNK: Setup custom tile land interactions ---
+        async function handleTileAction(player) {
+            const tile = pathData[player.position];
+            if (!tile) {
+                nextTurn();
+                return;
+            }
+            
+            if (player.gainedShieldThisTurn) {
+                player.gainedShieldThisTurn = false;
+                await new Promise(resolve => {
+                    showInfoModal('🛡️ TAMENG DIAKTIFKAN!', `${player.name} melewati/mendarat di Zona Aman (🛡️) dan mendapatkan Tameng Pelindung tambahan!`, resolve);
+                });
+            }
+            
+            if (tile.type === 'treasure') {
+                showSnippetModal(player);
+                return;
+            } 
+            else if (tile.type === 'bonus') {
+                player.score += tile.val;
+                showInfoModal('⭐ BONUS!', `Selamat! ${player.name} menemukan bonus dan mendapat ${tile.val} poin!`, () => nextTurn());
+                return;
+            }
+            else if (tile.type === 'shortcut') {
+                const modal = document.getElementById('shortcut-modal');
+                modal.classList.add('show');
+                
+                const btnYes = document.getElementById('btn-shortcut-yes');
+                const btnNo = document.getElementById('btn-shortcut-no');
+                
+                const newBtnYes = btnYes.cloneNode(true);
+                const newBtnNo = btnNo.cloneNode(true);
+                btnYes.parentNode.replaceChild(newBtnYes, btnYes);
+                btnNo.parentNode.replaceChild(newBtnNo, btnNo);
+                
+                newBtnYes.addEventListener('click', async () => {
+                    AudioHelper.playSelect();
+                    modal.classList.remove('show');
+                    
+                    const startPos = player.position;
+                    player.position += tile.val; 
+                    if(player.position >= pathData.length) player.position = pathData.length - 1;
+                    
+                    if (selectedMode === 1) {
+                        trigger3DStepJump(startPos, player.position);
+                    }
+                    
+                    updateAllPawnsVisuals();
+                    await sleep(400);
+                    
+                    if(player.position === pathData.length - 1) {
+                        startFinishChallenge(player);
+                    } else {
+                        nextTurn();
+                    }
+                });
+                
+                newBtnNo.addEventListener('click', () => {
+                    AudioHelper.playSelect();
+                    modal.classList.remove('show');
+                    nextTurn();
+                });
+                return;
+            }
+            else if (tile.type === 'penalty' || tile.type === 'trap' || tile.type === 'restart' || tile.type === 'lightning') {
+                if (player.hasShield) {
+                    player.hasShield = false; 
+                    let obsName = "";
+                    if (tile.type === 'penalty') obsName = "Air Panas (♨️)";
+                    else if (tile.type === 'trap') obsName = "Jebakan (⚠️)";
+                    else if (tile.type === 'restart') obsName = "Area Radiasi (☣️)";
+                    else if (tile.type === 'lightning') obsName = "Petir Dahsyat (⚡)";
+                    
+                    showInfoModal('🛡️ TAMENG AKTIF!', `Luar biasa! Tameng Pelindung ${player.name} melindungi kamu secara otomatis dari bahaya ${obsName}! Efek rintangan dinetralkan sepenuhnya tanpa perlu suit!`, () => nextTurn());
+                    return;
+                }
+
+                const kgbResult = await startKGBChallenge(player, tile);
+                
+                if (kgbResult === 'win') {
+                    showInfoModal('🛡️ SELAMAT!', `Luar biasa! ${player.name} menang suit melawan Penjaga Rintangan sehingga bebas melaju tanpa hukuman!`, () => nextTurn());
+                } else {
+                    if (tile.type === 'penalty') {
+                        if (player.hasLife > 0) {
+                            player.hasLife--;
+                            if (player.hasLife === 0) {
+                                showInfoModal('💔 KEHABISAN NYAWA!', `Aduh! ${player.name} kalah suit dan kehabisan semua Nyawa! Pionmu terlempar kembali ke START dan nyawamu telah pulih sepenuhnya!`, async () => {
+                                    const startPos = player.position;
+                                    player.position = 0;
+                                    player.hasLife = (player.buff && player.buff.id === 'life') ? 4 : 3;
+                                    if (selectedMode === 1) {
+                                        trigger3DStepJump(startPos, player.position);
+                                    }
+                                    updateAllPawnsVisuals();
+                                    await sleep(400);
+                                    nextTurn();
+                                });
+                            } else {
+                                showInfoModal('❤️ NYAWA DIKORBANKAN!', `Aduh! ${player.name} kalah suit melawan penjaga, tetapi <strong>1 Nyawa</strong> dikorbankan agar kamu bebas dari pengurangan poin!`, () => nextTurn());
+                            }
+                        } else {
+                            player.score += tile.val;
+                            showInfoModal('♨️ AIR PANAS!', `Aduh! ${player.name} kalah suit dan karena nyawamu kosong (0), kamu terpaksa kehilangan ${Math.abs(tile.val)} poin akibat terperosok air panas!`, () => nextTurn());
+                        }
+                    }
+                    else if (tile.type === 'trap') {
+                        if (player.hasLife > 0) {
+                            player.hasLife--;
+                            if (player.hasLife === 0) {
+                                showInfoModal('💔 KEHABISAN NYAWA!', `Ouch! ${player.name} kalah suit dan kehabisan semua Nyawa! Pionmu terlempar kembali ke START dan nyawamu telah pulih sepenuhnya!`, async () => {
+                                    const startPos = player.position;
+                                    player.position = 0;
+                                    player.hasLife = (player.buff && player.buff.id === 'life') ? 4 : 3;
+                                    if (selectedMode === 1) {
+                                        trigger3DStepJump(startPos, player.position);
+                                    }
+                                    updateAllPawnsVisuals();
+                                    await sleep(400);
+                                    nextTurn();
+                                });
+                            } else {
+                                showInfoModal('❤️ NYAWA DIKORBANKAN!', `Ouch! ${player.name} kalah suit. <strong>1 Nyawa</strong> dikorbankan agar kamu terhindar dari jebakan mundur langkah!`, () => nextTurn());
+                            }
+                        } else {
+                            showInfoModal('⚠️ JEBAKAN!', `Awas! ${player.name} kalah suit dan tidak memiliki nyawa tersisa. Kamu terkena jebakan mundur ${Math.abs(tile.val)} langkah.`, async () => {
+                                const startPos = player.position;
+                                player.position += tile.val;
+                                if(player.position < 0) player.position = 0;
+                                
+                                if (selectedMode === 1) {
+                                    trigger3DStepJump(startPos, player.position);
+                                }
+                                
+                                updateAllPawnsVisuals();
+                                await sleep(400);
+                                nextTurn(); 
+                            });
+                        }
+                    }
+                    else if (tile.type === 'restart') {
+                        if (player.hasLife > 0) {
+                            player.hasLife--;
+                            if (player.hasLife === 0) {
+                                showInfoModal('💔 KEHABISAN NYAWA!', `Gawat! ${player.name} kalah suit dan kehabisan semua Nyawa! Pionmu terlempar kembali ke START dan nyawamu telah pulih sepenuhnya!`, async () => {
+                                    const startPos = player.position;
+                                    player.position = 0;
+                                    player.hasLife = (player.buff && player.buff.id === 'life') ? 4 : 3;
+                                    if (selectedMode === 1) {
+                                        trigger3DStepJump(startPos, player.position);
+                                    }
+                                    updateAllPawnsVisuals();
+                                    await sleep(400);
+                                    nextTurn();
+                                });
+                            } else {
+                                showInfoModal('❤️ NYAWA DIKORBANKAN!', `Gawat! Kamu kalah suit, tetapi <strong>1 Nyawa</strong> dikorbankan agar kamu selamat dari radiasi dan tidak perlu pulang ke START!`, () => nextTurn());
+                            }
+                        } else {
+                            showInfoModal('☣️ AREA RADIASI!', `Gawat sekali! ${player.name} kalah suit tanpa sisa nyawa, kamu harus dipukul mundur kembali ke START!`, async () => {
+                                const startPos = player.position;
+                                player.position = 0;
+                                
+                                if (selectedMode === 1) {
+                                    trigger3DStepJump(startPos, player.position);
+                                }
+                                
+                                updateAllPawnsVisuals();
+                                await sleep(400);
+                                nextTurn();
+                            });
+                        }
+                    }
+                    else if (tile.type === 'lightning') {
+                        if (player.hasLife > 0) {
+                            player.hasLife--;
+                            if (player.hasLife === 0) {
+                                showInfoModal('💔 KEHABISAN NYAWA!', `Zzap! ${player.name} kalah suit dan kehabisan semua Nyawa! Pionmu terlempar kembali ke START dan nyawamu telah pulih sepenuhnya!`, async () => {
+                                    const startPos = player.position;
+                                    player.position = 0;
+                                    player.hasLife = (player.buff && player.buff.id === 'life') ? 4 : 3;
+                                    if (selectedMode === 1) {
+                                        trigger3DStepJump(startPos, player.position);
+                                    }
+                                    updateAllPawnsVisuals();
+                                    await sleep(400);
+                                    nextTurn();
+                                });
+                            } else {
+                                showInfoModal('❤️ NYAWA DIKORBANKAN!', `Zzap! Kamu kalah suit, namun <strong>1 Nyawa</strong> melindungimu sehingga seluruh poin terkumpul tidak hangus!`, () => nextTurn());
+                            }
+                        } else {
+                            player.score = 0;
+                            showInfoModal('⚡ PETIR DAHSYAT!', `Zzzaappp! ${player.name} kalah suit dan tersambar petir dahsyat! Karena nyawamu kosong (0), seluruh poin terkumpul hangus menjadi 0!`, () => nextTurn());
+                        }
+                    }
+                }
+                return;
+            }
+            else if (tile.type === 'gate') {
+                nextTurn();
+                return;
+            }
+            else if (tile.type === 'finish') {
+                startFinishChallenge(player);
+                return;
+            }
+            
+            nextTurn();
+        }
+
+        // --- STREAMING_CHUNK: Setup finish line history questions ---
+        function startFinishChallenge(player) {
+            activeFinishPlayer = player;
+            currentFinishQuestionIdx = 0;
+            
+            let shuffled = [...gegerCilegonQuestions].sort(() => 0.5 - Math.random());
+            finishChallengeQuestions = shuffled.slice(0, 4);
+            
+            for (let i = 1; i <= 4; i++) {
+                const stepEl = document.getElementById(`fq-step-${i}`);
+                stepEl.className = "w-8 h-8 rounded-full border-2 border-slate-300 flex items-center justify-center font-bold text-slate-400 bg-slate-50";
+                stepEl.innerText = i;
+            }
+            
+            document.getElementById('finish-quiz-feedback').classList.add('hidden');
+            
+            showNextFinishQuestion();
+            document.getElementById('finish-quiz-modal').classList.add('show');
+        }
+
+        function showNextFinishQuestion() {
+            const q = finishChallengeQuestions[currentFinishQuestionIdx];
+            document.getElementById('finish-quiz-question').innerText = q.q;
+            
+            for (let i = 1; i <= 4; i++) {
+                const stepEl = document.getElementById(`fq-step-${i}`);
+                if (i < currentFinishQuestionIdx + 1) {
+                    stepEl.className = "w-8 h-8 rounded-full border-2 border-green-500 flex items-center justify-center font-bold text-white bg-green-500 shadow-md shadow-green-200";
+                    stepEl.innerHTML = "✓";
+                } else if (i === currentFinishQuestionIdx + 1) {
+                    stepEl.className = "w-8 h-8 rounded-full border-4 border-yellow-400 flex items-center justify-center font-bold text-slate-800 bg-yellow-100 animate-pulse shadow-md shadow-yellow-200";
+                    stepEl.innerText = i;
+                } else {
+                    stepEl.className = "w-8 h-8 rounded-full border-2 border-slate-300 flex items-center justify-center font-bold text-slate-400 bg-slate-50";
+                    stepEl.innerText = i;
+                }
+            }
+            
+            const optionsContainer = document.getElementById('finish-quiz-options');
+            optionsContainer.innerHTML = '';
+            
+            q.options.forEach((opt, idx) => {
+                const btn = document.createElement('button');
+                btn.className = 'quiz-btn w-full text-left bg-white border-2 border-slate-200 hover:border-slate-400 p-3 rounded-xl font-bold text-slate-700 transition-all shadow-sm';
+                btn.innerText = `${String.fromCharCode(65 + idx)}. ${opt}`;
+                btn.onclick = () => handleFinishQuizAnswer(idx, btn);
+                optionsContainer.appendChild(btn);
+            });
+        }
+
+        // --- STREAMING_CHUNK: Setup endgame logic and quiz processing ---
+        async function handleFinishQuizAnswer(selectedIndex, btnElement) {
+            const q = finishChallengeQuestions[currentFinishQuestionIdx];
+            const p = activeFinishPlayer;
+            const buttons = document.querySelectorAll('#finish-quiz-options button');
+            
+            buttons.forEach(b => b.style.pointerEvents = 'none');
+            
+            const feedback = document.getElementById('finish-quiz-feedback');
+            feedback.classList.remove('hidden');
+            
+            if (selectedIndex === q.a) {
+                btnElement.classList.add('correct');
+                feedback.innerText = "✅ JAWABAN BENAR!";
+                feedback.className = "font-bold text-lg mt-4 text-green-600 animate-bounce";
+                AudioHelper.playSelect();
+                
+                const activeStepEl = document.getElementById(`fq-step-${currentFinishQuestionIdx + 1}`);
+                activeStepEl.className = "w-8 h-8 rounded-full border-2 border-green-500 flex items-center justify-center font-bold text-white bg-green-500 shadow-md shadow-green-200";
+                activeStepEl.innerHTML = "✓";
+
+                await sleep(1500);
+                feedback.classList.add('hidden');
+                
+                currentFinishQuestionIdx++;
+                if (currentFinishQuestionIdx < 4) {
+                    showNextFinishQuestion();
+                } else {
+                    document.getElementById('finish-quiz-modal').classList.remove('show');
+                    showWinnerModal();
+                }
+            } else {
+                btnElement.classList.add('wrong');
+                buttons[q.a].classList.add('correct');
+                
+                const activeStepEl = document.getElementById(`fq-step-${currentFinishQuestionIdx + 1}`);
+                activeStepEl.className = "w-8 h-8 rounded-full border-2 border-red-500 flex items-center justify-center font-bold text-white bg-red-500 shadow-md shadow-red-200";
+                activeStepEl.innerText = "✗";
+
+                feedback.innerText = `❌ SALAH! Ujian gagal. ${p.name} dipaksa mundur 4 langkah!`;
+                feedback.className = "font-bold text-lg mt-4 text-red-600";
+                AudioHelper.playDiceLanding();
+                
+                await sleep(2500);
+                document.getElementById('finish-quiz-modal').classList.remove('show');
+                
+                const startPosIndex = p.position;
+                p.position = Math.max(0, p.position - 4);
+                
+                if (selectedMode === 1) {
+                    trigger3DStepJump(startPosIndex, p.position);
+                }
+                
+                updateAllPawnsVisuals();
+                await sleep(500);
+                nextTurn();
+            }
+        }
+
+        async function checkCollisions(activePlayer) {
+            if (activePlayer.position === 0 || activePlayer.position === pathData.length - 1) {
+                return;
+            }
+            
+            const currentTile = pathData[activePlayer.position];
+            if (currentTile && currentTile.type === 'safe') {
+                return; 
+            }
+            
+            let kickedPlayers = [];
+            let shieldedPlayers = [];
+            
+            players.forEach(p => {
+                if (p.id !== activePlayer.id && p.position === activePlayer.position) {
+                    if (p.buff && p.buff.id === 'shield' && p.hasShield) {
+                        p.hasShield = false; 
+                        shieldedPlayers.push(p.name);
+                    } else {
+                        p.position = 0; 
+                        kickedPlayers.push(p.name);
+                    }
+                }
+            });
+            
+            if (shieldedPlayers.length > 0) {
+                updateAllPawnsVisuals();
+                AudioHelper.playSelect();
+                await new Promise(resolve => {
+                    showInfoModal(
+                        '🛡️ TAMENG AKTIF!',
+                        `Pion ${shieldedPlayers.join(' & ')} menggunakan kekuatan Tameng Pelindung! Tabrakan dari ${activePlayer.name} berhasil ditepis dan tetap aman di tempatnya!`,
+                        resolve
+                    );
+                });
+            }
+            
+            if (kickedPlayers.length > 0) {
+                updateAllPawnsVisuals();
+                AudioHelper.playDiceLanding(); 
+                
+                await new Promise(resolve => {
+                    showInfoModal(
+                        '💥 TERTABRAK!', 
+                        `${activePlayer.name} mendarat di petak yang sama! ${kickedPlayers.join(' dan ')} tertabrak kembali ke titik START!`, 
+                        resolve
+                    );
+                });
+            }
+        }
+
+        // --- STREAMING_CHUNK: Setting up turns transition logic ---
+        async function nextTurn() {
+            await checkCollisions(players[currentPlayerIndex]);
+            updateLeaderboard();
+            if (selectedMode !== 1) {
+                currentPlayerIndex = (currentPlayerIndex + 1) % players.length;
+            }
+            updateTurnUI();
+            isMoving = false;
+            setDPadState(true);
+            document.getElementById('btn-roll').disabled = false;
+        }
+
+        let activePlayerForSnippet = null;
+
+        function showSnippetModal(player) {
+            activePlayerForSnippet = player;
+            const randIndex = Math.floor(Math.random() * gegerCilegonSnippets.length);
+            document.getElementById('snippet-text').innerText = gegerCilegonSnippets[randIndex];
+            
+            const btn = document.getElementById('btn-claim-snippet');
+            btn.onclick = () => claimSnippetPoints();
+            
+            document.getElementById('snippet-modal').classList.add('show');
+        }
+
+        async function claimSnippetPoints() {
+            AudioHelper.playSelect();
+            activePlayerForSnippet.score += 10;
+            activePlayerForSnippet.snippetsCollected = (activePlayerForSnippet.snippetsCollected || 0) + 1;
+            
+            const btn = document.getElementById('btn-claim-snippet');
+            btn.innerText = "✅ Berhasil! +10 Poin";
+            btn.classList.replace('!bg-green-400', '!bg-blue-400');
+            btn.classList.replace('!border-green-700', '!border-blue-700');
+            btn.classList.replace('!text-green-900', '!text-blue-900');
+            btn.classList.replace('!shadow-[0_6px_0_#15803d]', '!shadow-[0_6px_0_#1d4ed8]');
+            
+            updateLeaderboard();
+            
+            await sleep(1000);
+            document.getElementById('snippet-modal').classList.remove('show');
+            
+            setTimeout(() => {
+                btn.innerText = "Kumpulkan & Klaim +10 Poin!";
+                btn.classList.replace('!bg-blue-400', '!bg-green-400');
+                btn.classList.replace('!border-blue-700', '!border-green-700');
+                btn.classList.replace('!text-blue-900', '!text-green-900');
+                btn.classList.replace('!shadow-[0_6px_0_#1d4ed8]', '!shadow-[0_6px_0_#15803d]');
+            }, 300);
+            
+            nextTurn();
+        }
+
+        // --- STREAMING_CHUNK: Setting modals overlay handlers ---
+        let onInfoCloseCb = null;
+        function showInfoModal(title, text, onClose) {
+            document.getElementById('info-title').innerText = title;
+            document.getElementById('info-text').innerText = text;
+            
+            let icon = '⚠️';
+            if(title.includes('BONUS')) icon = '⭐';
+            if(title.includes('PINTAS')) icon = '🔄';
+            if(title.includes('NYAWA') || title.includes('DIKORBANKAN')) icon = '❤️';
+            if(title.includes('AIR PANAS')) icon = '♨️';
+            if(title.includes('RADIASI')) icon = '☣️';
+            if(title.includes('PETIR')) icon = '⚡';
+            if(title.includes('GERBANG')) icon = '⛩️';
+            if(title.includes('SELESAI DIACAK')) icon = '🎲';
+            if(title.includes('TABRAK')) icon = '💥';
+            if(title.includes('SELAMAT') || title.includes('TAMENG')) icon = '🛡️';
+            document.getElementById('info-icon').innerText = icon;
+
+            onInfoCloseCb = onClose;
+            document.getElementById('info-modal').classList.add('show');
+        }
+
+        document.getElementById('btn-info-close').addEventListener('click', () => {
+            document.getElementById('info-modal').classList.remove('show');
+            if(onInfoCloseCb) onInfoCloseCb();
+        });
+
+        // --- STREAMING_CHUNK: Setup game podium modals ---
+        function showWinnerModal() {
+            const standings = [...players].sort((a,b) => b.score - a.score);
+            const container = document.getElementById('final-standings');
+            container.innerHTML = '';
+            
+            standings.forEach((p, idx) => {
+                let rankIcon = idx === 0 ? '🏆' : (idx === 1 ? '🥈' : (idx === 2 ? '🥉' : ''));
+                container.innerHTML += `
+                    <div class="flex justify-between items-center bg-white p-3 rounded-xl border border-slate-200">
+                        <span class="font-bold text-lg">${rankIcon} ${p.name}</span>
+                        <span class="font-heading text-xl text-slate-700">${p.score} Poin</span>
+                    </div>
+                `;
+            });
+
+            const levelMsg = document.getElementById('winner-level-msg');
+            const actionsContainer = document.getElementById('winner-actions');
+            actionsContainer.innerHTML = '';
+
+            if (selectedMode === 1 && currentLevel < 3) {
+                levelMsg.innerText = `Luar biasa! Kamu berhasil menaklukkan tantangan di Level ${currentLevel}!`;
+                
+                const nextBtn = document.createElement('button');
+                nextBtn.className = 'btn-action text-xl px-8 py-3 !bg-green-400 !border-green-700 !text-green-900 !shadow-[0_6px_0_#15803d]';
+                nextBtn.innerText = `Lanjutkan ke Level ${currentLevel + 1}`;
+                nextBtn.onclick = loadNextLevel;
+                actionsContainer.appendChild(nextBtn);
+
+                const exitBtn = document.createElement('button');
+                exitBtn.className = 'btn-action text-xl px-8 py-3 !bg-slate-300 !border-slate-500 !text-slate-700 !shadow-[0_6px_0_#64748b]';
+                exitBtn.innerText = 'Keluar ke Menu';
+                exitBtn.onclick = () => location.reload();
+                actionsContainer.appendChild(exitBtn);
+            } 
+            else if (selectedMode === 1 && currentLevel === 3) {
+                levelMsg.innerText = `Selamat! Kamu telah menyelesaikan seluruh Level 1, 2, dan 3! Kamu adalah Ahli Sejarah Sejati! 🎉🎉`;
+                
+                const restartBtn = document.createElement('button');
+                restartBtn.className = 'btn-action text-xl px-8 py-3';
+                restartBtn.innerText = 'Main Lagi dari Awal';
+                restartBtn.onclick = () => location.reload();
+                actionsContainer.appendChild(restartBtn);
+            } 
+            else {
+                levelMsg.innerText = "Seseorang telah mencapai garis Finish.";
+                
+                const restartBtn = document.createElement('button');
+                restartBtn.className = 'btn-action text-xl px-8 py-3';
+                restartBtn.innerText = 'Main Lagi';
+                restartBtn.onclick = () => location.reload();
+                actionsContainer.appendChild(restartBtn);
+            }
+
+            document.getElementById('winner-modal').classList.add('show');
+        }
+
+        // --- STREAMING_CHUNK: Setup levels loading controls ---
+        function loadNextLevel() {
+            AudioHelper.playSelect();
+            document.getElementById('winner-modal').classList.remove('show');
+            
+            isMoving = false;
+            const rollBtn = document.getElementById('btn-roll');
+            if (rollBtn) rollBtn.disabled = false;
+            
+            currentLevel++;
+            randomizeTries = 3;
+            
+            players.forEach(p => {
+                p.position = 0;
+                if (p.buff) {
+                    p.hasShield = (p.buff.id === 'shield');
+                    p.hasSteal = (p.buff.id === 'steal');
+                }
+            });
+            currentPlayerIndex = 0;
+            
+            pathData = [];
+            randomizePath(); 
+            
+            if (selectedMode === 1) {
+                init3D();
+                updateLeaderboard();
+                updateTurnUI();
+            } else {
+                initBoard();
+            }
+        }
+
+        // --- STREAMING_CHUNK: Setting screen flow navigation actions ---
+        function showMenu() {
+            document.getElementById('screen-menu').classList.remove('hide-screen');
+            document.getElementById('screen-setup').classList.add('hide-screen');
+            document.getElementById('screen-game').classList.add('hide-screen');
+            document.getElementById('btn-back').classList.add('hide-screen');
+            document.getElementById('hud-lives').classList.add('hide-screen');
+            
+            if (animationFrameId3D) {
+                cancelAnimationFrame(animationFrameId3D);
+                animationFrameId3D = null;
+            }
+        }
+
+        function selectMode(numPlayers) {
+            AudioHelper.playSelect(); 
+            selectedMode = numPlayers;
+            document.getElementById('screen-menu').classList.add('hide-screen');
+
+            const setupContainer = document.getElementById('player-inputs');
+            setupContainer.innerHTML = '';
+            
+            for(let i = 0; i < numPlayers; i++) {
+                const randomBuff = BUFFS[Math.floor(Math.random() * BUFFS.length)];
+
+                setupContainer.innerHTML += `
+                    <div class="text-left bg-slate-50 p-3 rounded-xl border-2 border-slate-200">
+                        <label class="font-bold text-slate-600 block mb-2 text-sm flex items-center gap-2">
+                            <span class="text-xl">${playerConfigs[i].emoji}</span> Nama Pemain ${i+1}
+                        </label>
+                        <div class="flex gap-3 items-center">
+                            <input type="text" id="pname-${i}" class="flex-1 p-3 border-4 border-slate-300 rounded-xl font-bold text-slate-700 outline-none focus:border-blue-500 transition-colors" placeholder="Ketik nama..." value="Pemain ${i+1}" maxlength="15">
+                            
+                            <div class="flex flex-col items-center justify-center bg-amber-50 border-4 border-amber-300 w-14 h-14 rounded-xl cursor-pointer hover:scale-105 active:scale-95 transition-all shadow-sm" 
+                                 onclick="showInfoModal('${randomBuff.icon} ${randomBuff.name}', '${randomBuff.desc}')" 
+                                 title="${randomBuff.name}: Klik untuk detail!">
+                                 <span class="text-2xl animate-pulse">${randomBuff.icon}</span>
+                                 <span class="text-[8px] font-heading text-amber-700 leading-none mt-0.5">BUFF</span>
+                            </div>
+                            
+                            <input type="hidden" id="pbuff-${i}" value="${randomBuff.id}">
+                        </div>
+                    </div>
+                `;
+            }
+            
+            document.getElementById('screen-setup').classList.remove('hide-screen');
+        }
+
+        // --- STREAMING_CHUNK: Setup gameplay initialization triggers ---
+        function startGame() {
+            players = []; 
+            currentLevel = 1; 
+            isMoving = false;
+            
+            for(let i = 0; i < selectedMode; i++) {
+                const nameInput = document.getElementById(`pname-${i}`).value.trim() || `Pemain ${i+1}`;
+                const buffId = document.getElementById(`pbuff-${i}`).value;
+                const assignedBuff = BUFFS.find(b => b.id === buffId);
+
+                let initialScore = 0;
+                let initialLife = 3; 
+
+                if (assignedBuff.id === 'points') initialScore = 5;
+                if (assignedBuff.id === 'life') initialLife = 4; 
+
+                players.push({
+                    id: i,
+                    name: nameInput,
+                    color: playerConfigs[i].color,
+                    emoji: playerConfigs[i].emoji,
+                    position: 0,
+                    score: initialScore,
+                    hasLife: initialLife,
+                    buff: assignedBuff,
+                    hasShield: assignedBuff.id === 'shield',
+                    hasSteal: assignedBuff.id === 'steal',
+                    snippetsCollected: 0
+                });
+            }
+            
+            document.getElementById('screen-setup').classList.add('hide-screen');
+            document.getElementById('screen-game').classList.remove('hide-screen');
+            document.getElementById('btn-back').classList.remove('hide-screen');
+            document.getElementById('hud-lives').classList.remove('hide-screen');
+            
+            currentPlayerIndex = 0;
+            randomizePath();
+
+            const b2d = document.getElementById('board-2d-wrapper');
+            const b3d = document.getElementById('board-3d-wrapper');
+
+            const soloCtrl = document.getElementById('control-solo');
+            const multiCtrl = document.getElementById('control-multiplayer');
+
+            if (selectedMode === 1) {
+                b2d.classList.add('hidden');
+                b3d.classList.remove('hidden');
+                
+                soloCtrl.classList.remove('hidden');
+                multiCtrl.classList.add('hidden');
+
+                setTimeout(() => {
+                    init3D();
+                    updateLeaderboard();
+                    updateTurnUI();
+                }, 100);
+            } else {
+                b3d.classList.add('hidden');
+                b2d.classList.remove('hidden');
+
+                soloCtrl.classList.add('hidden');
+                multiCtrl.classList.remove('hidden');
+
+                initBoard();
+            }
+        }
+
+        // --- STREAMING_CHUNK: Setup screen exit confirmations ---
+        function handleBackClick() {
+            AudioHelper.playSelect();
+            const setupScreen = document.getElementById('screen-setup');
+            if (setupScreen && !setupScreen.classList.contains('hide-screen')) {
+                showMenu();
+            } else {
+                document.getElementById('confirm-exit-modal').classList.add('show');
+            }
+        }
+
+        function closeExitModal() {
+            AudioHelper.playSelect();
+            document.getElementById('confirm-exit-modal').classList.remove('show');
+        }
+
+        function confirmExit() {
+            AudioHelper.playSelect();
+            document.getElementById('confirm-exit-modal').classList.remove('show');
+            
+            isMoving = false;
+            document.getElementById('btn-roll').disabled = false;
+            document.getElementById('game-board').innerHTML = '';
+            
+            pathData = [];
+            currentLevel = 1;
+            
+            showMenu();
+        }
+
+        // --- STREAMING_CHUNK: Setup main global document events ---
+        window.onload = () => {
+            showMenu();
+            
+            const startBgmOnInteraction = () => {
+                AudioHelper.playAmbientBGM();
+                document.removeEventListener('click', startBgmOnInteraction);
+                document.removeEventListener('touchstart', startBgmOnInteraction);
+            };
+            document.addEventListener('click', startBgmOnInteraction);
+            document.addEventListener('touchstart', startBgmOnInteraction);
+        };
+
+        function toggleSound() {
+            const isMuted = AudioHelper.toggleMute();
+            const soundIcon = document.getElementById('sound-icon');
+            if (isMuted) {
+                soundIcon.innerText = "🔇";
+                soundIcon.parentElement.title = "Nyalakan Musik Latar";
+            } else {
+                soundIcon.innerText = "🔊";
+                soundIcon.parentElement.title = "Matikan Musik Latar";
+                AudioHelper.playSelect(); 
+            }
+        }
+
+        function toggleFullscreen() {
+            if (!document.fullscreenElement) {
+                const docEl = document.documentElement;
+                if (docEl.requestFullscreen) {
+                    docEl.requestFullscreen();
+                } else if (docEl.mozRequestFullScreen) { 
+                    docEl.mozRequestFullScreen();
+                } else if (docEl.webkitRequestFullscreen) { 
+                    docEl.webkitRequestFullscreen();
+                } else if (docEl.msRequestFullscreen) { 
+                    docEl.msRequestFullscreen();
+                }
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                } else if (document.mozCancelFullScreen) {
+                    document.mozCancelFullScreen();
+                } else if (document.webkitExitFullscreen) {
+                    document.webkitExitFullscreen();
+                } else if (document.msExitFullscreen) {
+                    document.msExitFullscreen();
+                }
+            }
+        }
+
+        document.addEventListener('fullscreenchange', handleFullscreenChange);
+        document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+        document.addEventListener('mozfullscreenchange', handleFullscreenChange);
+        document.addEventListener('MSFullscreenChange', handleFullscreenChange);
+
+        function handleFullscreenChange() {
+            const btnIcon = document.getElementById('fullscreen-icon');
+            if (document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement) {
+                btnIcon.innerText = "❌"; 
+                btnIcon.title = "Keluar Layar Penuh";
+            } else {
+                btnIcon.innerText = "🖥️"; 
+                btnIcon.title = "Layar Penuh";
+            }
+            setTimeout(updateAllPawnsVisuals, 300);
+        }
+    </script>
+</body>
+</html>
